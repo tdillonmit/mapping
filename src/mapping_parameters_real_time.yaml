@@ -1,0 +1,32 @@
+---
+savepath : /home/tdillon/datasets/gating_test_data_2
+
+# is there an ECG signal?
+gating : 1
+
+# record or just visualize data?
+record : 1
+
+# healthy first return manual segmentation
+tsdf_map : 1
+
+# ML segmentation
+# dissection : 0
+
+# # esdf mapping
+# esdf_map : 0
+
+# # parameterize dissection for correspondence algorithms
+# dissection_parameterize : 0
+
+# # apply smooothing to esdf mapping
+# esdf_smoothing : 0
+
+# # certainty coloring - visualize esdf weight metric
+# certainty_coloring : 0
+
+# # save masks and transforms in tum format for killing fusion Cuda repo
+# killingfusion_save: 0
+
+
+
