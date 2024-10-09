@@ -37,7 +37,7 @@ class PointCloudUpdater:
     def __init__(self):
         
         # load the yaml file - specific to post processing
-        with open('mapping_parameters_real_time.yaml', 'r') as file:
+        with open('/home/tdillon/mapping/src/mapping_parameters_real_time.yaml', 'r') as file:
             config_yaml = yaml.safe_load(file)
 
         self.savepath = config_yaml['savepath']
@@ -55,11 +55,27 @@ class PointCloudUpdater:
         # healthy first return mapping for reference
         self.tsdf_map = config_yaml['tsdf_map']
 
+        # ---- LOAD ROS PARAMETERS ------ #
+        param_names = ['/angle', '/translation','/scaling','/threshold','/no_points','/crop_index','/radial_offset','/oclock']
+
+        # fetch these from yaml instead..
+        self.default_values=load_default_values()
+
+        # mapping specific parameters
+        self.default_values['/no_points'] = 1000
+
+        no_points=self.default_values['/no_points']
+        # override previous threshold
+        self.default_values['/threshold'] = 50
+
+        self.default_values['/crop_index'] = 60
+
+
         # Set default parameter values if they don't exist
         for param_name in param_names:
             if not rospy.has_param(param_name):
-                rospy.set_param(param_name, default_values.get(param_name, None))
-                rospy.loginfo(f"Initialized {param_name} with default value: {default_values.get(param_name, None)}")
+                rospy.set_param(param_name, self.default_values.get(param_name, None))
+                rospy.loginfo(f"Initialized {param_name} with default value: {self.default_values.get(param_name, None)}")
 
 
         #setup subscribers
@@ -100,20 +116,6 @@ class PointCloudUpdater:
             self.ecg_signal=[]
             self.image_times=[]
 
-        # ---- LOAD ROS PARAMETERS ------ #
-        param_names = ['/angle', '/translation','/scaling','/threshold','/no_points','/crop_index','/radial_offset','/oclock']
-
-        # fetch these from yaml instead..
-        self.default_values=load_default_values()
-
-        # mapping specific parameters
-        self.default_values['/no_points'] = 1000
-
-        no_points=self.default_values['/no_points']
-        # override previous threshold
-        self.default_values['/threshold'] = 50
-
-        self.default_values['/crop_index'] = 60
 
 
         # ---- INITIALIZE VISUALIZER ----- #
@@ -161,8 +163,7 @@ class PointCloudUpdater:
 
   
         # ------- INITIALIZE IMAGING PARAMETERS ------- #
-        self.image_width=1280
-        self.image_height=1024
+
 
         # CROP IMAGE
         start_x=59
@@ -276,6 +277,7 @@ class PointCloudUpdater:
         # Assuming RGB format
         rgb_image_data = np.frombuffer(msg.data, dtype=np.uint8)
         rgb_image = rgb_image_data.reshape((self.image_height, self.image_width, 3))
+
         
 
         grayscale_image=preprocess_ivus_image(rgb_image,self.box_crop,self.circle_crop,self.text_crop,self.crosshairs_crop)
@@ -289,8 +291,8 @@ class PointCloudUpdater:
             self.image_times.append(image_timestamp_in_seconds)
 
         # can stop here and do all processing / reconstruction later
-        if(tsdf_map != 1):
-            continue
+        if(self.tsdf_map != 1):
+            pass
 
         # fetch rospy parameters for real time mapping (could be placed in initialization)
         threshold = rospy.get_param('threshold')
@@ -545,7 +547,7 @@ class PointCloudUpdater:
             with open(image_times_filename, 'wb') as f:
                 np.save(f, image_times)
 
-            if(gating == 1):
+            if(self.gating == 1):
                 ecg_times = np.asarray(self.ecg_times)
                 ecg_times_filename = f'{self.write_folder}/ecg_signal/ecg_times.npy'
                 with open(ecg_times_filename, 'wb') as f:

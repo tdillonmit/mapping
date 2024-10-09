@@ -28,6 +28,8 @@ install(PROGRAMS
   src/binary_image_visualizer.py
   src/rgb_image_visualizer.py
   src/mapping_parameters_gui.py
+  src/mapping_real_time.py
+  src/gating_signal_visualizer.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
@@ -42,6 +44,8 @@ catkin_install_python(PROGRAMS
   src/binary_image_visualizer.py
   src/rgb_image_visualizer.py
   src/mapping_parameters_gui.py
+  src/mapping_real_time.py
+  src/gating_signal_visualizer.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

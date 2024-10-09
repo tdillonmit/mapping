@@ -1,13 +1,11 @@
 <launch>
   <!-- Include the first launch file -->
-  <include file="/home/tdillon/EM_tracker/src/ascension_ros/launch/demo.launch" />
+  <include file="/home/tdillon/EM_tracker/src/ascension/launch/demo.launch" />
   <include file="/home/tdillon/usb_workspace/src/usb_cam/launch/usb_cam.launch" />
     
   <!-- the primary node for computation and visualization -->
-  <node name="open3d_visualizer" pkg="gating_data_collection" type="mapping_real_time.py" output="screen">
-    <param name="image_path" type="str" value="$(arg image_path)" />
-  </node>
-  
+  <node name="open3d_visualizer" pkg="gating_data_collection" type="mapping_real_time.py" output="screen" />
+
   <!-- helpers -->
   <node name="binary_image_visualizer" pkg="gating_data_collection" type="binary_image_visualizer.py" output="screen" />
   <node name="rgb_image_visualizer" pkg="gating_data_collection" type="rgb_image_visualizer.py" output="screen" />

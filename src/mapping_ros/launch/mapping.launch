@@ -1,6 +1,6 @@
 <launch>
   <!-- Include the first launch file -->
-  <include file="/home/tdillon/EM_tracker/src/ascension_ros/launch/demo.launch" />
+  <include file="/home/tdillon/EM_tracker/src/ascension/launch/demo.launch" />
   <include file="/home/tdillon/usb_workspace/src/usb_cam/launch/usb_cam.launch" />
   
   <!--node name="open3d_visualizer" pkg="mapping_ros" type="mapping.py" output="screen" -->
