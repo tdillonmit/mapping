@@ -1,5 +1,13 @@
 ---
-savepath : /home/tdillon/datasets/gating_test_data_2
+# savepath : /home/tdillon/datasets/gating_test_data_2
+
+# savepath : /home/tdillon/datasets/hydrogel_phantom_far_lumen
+
+# savepath : /home/tdillon/datasets/philips_hydrogel
+
+# savepath : /home/tdillon/datasets/pig_aorta_1
+# saarduino-ide_2.3.3_Linux_64bitvepath : /home/tdillon/datasets/pig_aorta_3
+savepath : /home/tdillon/datasets/pva_patient_5_with_ecg_shrunk
 
 # is there an ECG signal?
 gating : 1
@@ -8,7 +16,7 @@ gating : 1
 record : 1
 
 # healthy first return manual segmentation
-tsdf_map : 1
+tsdf_map : 0
 
 # ML segmentation
 # dissection : 0
