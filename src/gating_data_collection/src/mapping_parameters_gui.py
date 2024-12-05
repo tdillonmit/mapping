@@ -1,18 +1,33 @@
 import rospy
-from tkinter import Tk, Label, Scale, Button
+from tkinter import Tk, Label, Scale, Button, IntVar
 import numpy as np
 
 def on_closing():
     root.destroy()
 
-def update_parameters(event):
+def update_parameters(event=None):
     # Update the parameters (you may want to add additional logic or error handling)
     rospy.set_param("no_points", no_points.get())
     rospy.set_param("threshold", threshold.get())
     rospy.set_param("crop_index", crop_index.get())
+    rospy.set_param("pullback", pullback.get())
 
 def on_closing():
     root.destroy()
+
+def start_pullback():
+    """
+    Set the pullback state to 1 (start).
+    """
+    pullback.set(1)
+    update_parameters()
+
+def stop_pullback():
+    """
+    Set the pullback state to 0 (stop).
+    """
+    pullback.set(0)
+    update_parameters()
 
 try:
     # Initialize rospy without creating a node
@@ -42,6 +57,16 @@ try:
     crop_index= Scale(root, from_=1, to=500, orient="horizontal", resolution=1, length=300, command=update_parameters)
     crop_index.set(60)  # Default value is 1.0
     crop_index.pack()
+
+    # pullback start / stop
+    pullback = IntVar(value=0)  # 0 = stopped, 1 = started
+
+    # Add buttons to start and stop pullback
+    start_button = Button(root, text="Start Pullback", command=start_pullback)
+    start_button.pack()
+
+    stop_button = Button(root, text="Stop Pullback", command=stop_pullback)
+    stop_button.pack()
 
     root.protocol("WM_DELETE_WINDOW", on_closing)
     # Run the GUI event loop
