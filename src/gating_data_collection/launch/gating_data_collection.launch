@@ -13,7 +13,7 @@
   <node name="rqt_image_view" pkg="rqt_image_view" type="rqt_image_view" args="/usb_cam/image_raw" output="screen" />
 
   <!-- gating signal visualizer, complete this later -->
-  <node name="gating_visualizer" pkg="gating_data_collection" type="gating_signal_visualizer.py" output="screen" />
+  <node name="gating_visualizer_white_pump" pkg="gating_data_collection" type="gating_signal_visualizer_white_pump.py" output="screen" />
   
   <!-- Launch rosserial node for Arduino communication -->
   <node name="rosserial_node" pkg="rosserial_python" type="serial_node.py" output="screen">

@@ -30,6 +30,7 @@ install(PROGRAMS
   src/mapping_parameters_gui.py
   src/mapping_real_time.py
   src/gating_signal_visualizer.py
+  src/gating_signal_visualizer_white_pump.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
@@ -46,6 +47,7 @@ catkin_install_python(PROGRAMS
   src/mapping_parameters_gui.py
   src/mapping_real_time.py
   src/gating_signal_visualizer.py
+  src/gating_signal_visualizer_white_pump.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
