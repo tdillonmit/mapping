@@ -69,8 +69,10 @@ class PointCloudUpdater:
 
         self.registered_ct_dataset = config_yaml['registered_ct_dataset']
 
+        self.live_deformation = config_yaml['live_deformation']
+
         # ---- LOAD ROS PARAMETERS ------ #
-        param_names = ['/angle', '/translation','/scaling','/threshold','/no_points','/crop_index','/radial_offset','/oclock', '/pullback']
+        param_names = ['/angle', '/translation','/scaling','/threshold','/no_points','/crop_index','/radial_offset','/oclock', '/constraint_radius','/pullback']
 
         # fetch these from yaml instead..
         self.default_values=load_default_values()
@@ -85,6 +87,8 @@ class PointCloudUpdater:
         self.default_values['/crop_index'] = 60
 
         self.default_values['/pullback'] = 0
+
+        self.default_values['/constraint_radius'] = 0.006
 
 
         # Set default parameter values if they don't exist
@@ -148,12 +152,16 @@ class PointCloudUpdater:
         self.volumetric_far_point_cloud = o3d.geometry.PointCloud() 
         self.volumetric_near_point_cloud = o3d.geometry.PointCloud() 
         self.point_cloud = o3d.geometry.PointCloud()
+        self.orifice_center_point_cloud = o3d.geometry.PointCloud()
+
+
         self.vis.add_geometry(self.near_point_cloud)
         self.vis.add_geometry(self.far_point_cloud)
         self.vis.add_geometry(self.dissection_flap_point_cloud)
         self.vis.add_geometry(self.volumetric_near_point_cloud)
         self.vis.add_geometry(self.volumetric_far_point_cloud)
         self.vis.add_geometry(self.point_cloud)
+        self.vis.add_geometry(self.orifice_center_point_cloud)
 
 
 
@@ -185,6 +193,8 @@ class PointCloudUpdater:
 
   
         # ------- INITIALIZE IMAGING PARAMETERS ------- #
+
+        self.minimum_thickness = 15
 
 
         # CROP IMAGE
@@ -283,6 +293,8 @@ class PointCloudUpdater:
             # needs to be scaled down?
             # registered_ct_lineset = o3d.io.read_line_set('/home/tdillon/datasets/' + dataset_name + '' + '/registered_ct.ply')
             registered_ct_lineset = o3d.io.read_line_set('/home/tdillon/datasets/' + self.registered_ct_dataset + '' + '/final_registration.ply')
+            self.registered_ct_mesh = o3d.io.read_triangle_mesh('/home/tdillon/datasets/' + dataset_name + '' + '/final_registration_mesh.ply')
+            self.registered_ct_mesh.remove_unreferenced_vertices()
 
 
             # volumetric_full_lumen_point_cloud = o3d.io.read_point_cloud('/home/tdillon/datasets/' + self.registered_ct_dataset + '' + '/volumetric_full_lumen_point_cloud.ply')
@@ -297,6 +309,34 @@ class PointCloudUpdater:
             registered_ct_lineset.paint_uniform_color([0,0,0])
 
 
+
+            # self.constraint_locations = np.load('/home/tdillon/datasets/' + dataset_name + '' + '/ct_centroids.npy')
+            # ct_centroid_pc = o3d.geometry.PointCloud()
+            ct_centroid_pc = o3d.io.read_point_cloud('/home/tdillon/datasets/' + dataset_name + '' + '/side_branch_centrelines.ply')
+            # ct_centroid_pc.points = o3d.utility.Vector3dVector(self.constraint_locations)
+            ct_centroid_pc.translate(-difference_1)
+            ct_centroid_pc.transform(get_transform_inverse(transformation_matrix_1))
+            self.constraint_locations = np.asarray(ct_centroid_pc.points)
+           
+
+            self.centerline_pc = o3d.io.read_point_cloud('/home/tdillon/datasets/' + dataset_name + '' + '/centerline_pc.ply')
+            self.centerline_pc.translate(-difference_1)
+            self.centerline_pc.transform(get_transform_inverse(transformation_matrix_1))
+            
+           
+
+            self.registered_ct_mesh.translate(-difference_1)
+            self.registered_ct_mesh.transform(get_transform_inverse(transformation_matrix_1))
+
+            self.registered_ct_mesh_2 = copy.deepcopy(self.registered_ct_mesh)
+            self.registered_ct_mesh_2.compute_vertex_normals()
+
+            self.vis2 = o3d.visualization.Visualizer()
+            self.vis2.create_window()
+            self.vis2.get_render_option().mesh_show_back_face = True
+            self.vis2.add_geometry(self.registered_ct_mesh_2)
+
+
             # ivus_funsr_lineset = create_wireframe_lineset_from_mesh(ivus_funsr_mesh)
             # ivus_funsr_lineset.paint_uniform_color([0,0,0])
 
@@ -305,6 +345,13 @@ class PointCloudUpdater:
             # self.vis.add_geometry(som_centreline)
             # self.vis.add_geometry(volumetric_full_lumen_point_cloud)
             print("registered the ct from non rigid icp!!")
+
+            if(self.live_deformation == 1):
+                constraint_radius=self.default_values['/constraint_radius'] 
+            
+                self.constraint_locations = np.vstack((self.constraint_locations,np.asarray(self.centerline_pc.points)[0,:],np.asarray(self.centerline_pc.points)[-1,:]))
+                self.constraint_indices = get_all_nodes_inside_radius(self.constraint_locations, constraint_radius, self.registered_ct_mesh)
+         
 
         pullback = rospy.get_param('pullback', 0)
         self.pullback_pub.publish(pullback)
@@ -464,47 +511,59 @@ class PointCloudUpdater:
             mask_1, mask_2 = deeplumen_segmentation(image,self.model)
 
 
-            # # ----- GET CONVEX HULL
-            # combined_mask = cv2.bitwise_or(mask_1, mask_2)
-            # combined_mask = np.uint8(combined_mask)
-            # contours,hier = cv2.findContours(combined_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            # length = len(contours)
-            # cont = [contours[i] for i in range(length)]
-            # cont = np.vstack(cont)
-            # hull = cv2.convexHull(cont)
+        
+            if(self.orifice_center_map == 1 ):
+
+                # ------ FIND ORIFICE PIXELS ------- #
+                
+                # every point for orifice detection
+                mask_1_contour_every_point,hier = cv2.findContours(mask_1, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+
+                # ensure that masks are well separated
+                kernel = np.ones((self.minimum_thickness, self.minimum_thickness), np.uint8)  # You can adjust the kernel size for the dilation effect
+                dilated_mask_1 = cv2.dilate(mask_1, kernel, iterations=1)
+
+                # Find the overlap between the dilated mask
+                touching_pixels = cv2.bitwise_and(dilated_mask_1, mask_2)
+
+                # # for all non zero pixels in the mask "touching_pixels", find the nearest points on mask_1_contour
+                non_zero_pixels = np.column_stack(np.where(touching_pixels > 0))  # Shape (M, 2)
+
+                # Step 3: Compute nearest contour point for each non-zero pixel
+                # This creates a matrix of distances between each pixel in `non_zero_pixels` and `contour_points`
+
+                contour_points = np.vstack(mask_1_contour_every_point).squeeze()
+                non_zero_pixels_xy = non_zero_pixels[:, [1, 0]]
+                distances = cdist(non_zero_pixels_xy, contour_points, metric='euclidean')
+
+                # For each non-zero pixel, find the index of the nearest contour point
+                nearest_indices = distances.argmin(axis=1)  # Shape (M,)
+            
+
+                if nearest_indices.size > 0:
+
+                    contiguous_indices, contiguous_block_points = get_contiguous_block_from_contour(contour_points, nearest_indices)
+
+                    orifice_mask = mask_2
+
+                    contour_points = np.asarray(contiguous_block_points)
+                    
+                    normals = visualize_contour_normals(orifice_mask, contour_points)
+                
+                    raycast_hits, ray_lengths = compute_branch_raycast_hits(mask_2, contour_points, normals)
+
+                    mid_index = len(raycast_hits) // 2
+
+                    orifice_center_three_d_points = get_single_point_cloud_from_pixels([contiguous_block_points[mid_index]],scaling)
+
+                
+                else:
+                    orifice_three_d_points = None
+                    orifice_center_three_d_points = None
             
 
 
-            # # ----- DISSECTION PARAMETERIZATION -------- #
-            # if(dissection_parameterize == 1):
-            #     try:
-            #         near_lumen_edge, far_lumen_edge, dissection_flap_skeleton, convex_hull_flap = parameterize_dissection(mask_1,mask_2)
-            #         clean_image = grayscale_image
-
-            #         inv_hull_mask = get_inv_convex_hull_mask(clean_image,near_lumen_edge,far_lumen_edge,dissection_flap_skeleton)
-
-
-            #         flap_esdf_image, modified_flap_esdf_image=flap_image_for_killingfusion_2(clean_image, dissection_flap_skeleton, mask_1)
-
-            #         for point in near_lumen_edge :
-            #             cv2.circle(clean_image, tuple(point), 1, (0,0,255), -1)  # Draw points
-
-            #         for point in far_lumen_edge :
-            #             cv2.circle(clean_image, tuple(point), 1, (255,0,0), -1)  # Draw points
-
-            #         for point in dissection_flap_skeleton :
-            #             cv2.circle(clean_image, tuple(point), 1, (0,255,0), -1)  # Draw points
-
-                    
-
-            #         # cv2.imshow('Skeleton extracted', clean_image)
-            #         # cv2.waitKey(5)
-            #     except:
-            #         print("parameterization failed!")
-            #         return
-
-
-            # ---- SCALING AND PADDING ----- #
+            # ---- PUBLISH IMAGE ----- #
 
             mask_1_contour,hier = cv2.findContours(mask_1, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             mask_2_contour,hier = cv2.findContours(mask_2, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -608,6 +667,26 @@ class PointCloudUpdater:
                 near_vpC_points = near_vpC_points.voxel_down_sample(voxel_size=0.0005)
 
                 near_vpC_points.transform(TW_EM @ TEM_C)
+
+                if(self.live_deformation == 1 and self.registered_ct == 1):
+                     
+                    #  coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.01, origin=[0, 0, 0])
+                    #  coordinate_frame.transform(TW_EM @ TEM_C)
+                    #  o3d.visualization.draw_geometries([self.registered_ct_mesh, self.centerline_pc, coordinate_frame, near_pC_points])
+
+                     try:
+                        deformed_mesh = live_deform(self.registered_ct_mesh, self.constraint_indices, self.centerline_pc, TW_EM @ TEM_C, near_vpC_points )
+                        temp_lineset = create_wireframe_lineset_from_mesh(deformed_mesh)
+                        self.registered_ct_lineset.points = temp_lineset.points
+                        self.registered_ct_lineset.lines = temp_lineset.lines
+                        self.vis.update_geometry(self.registered_ct_lineset)
+
+                        self.registered_ct_mesh_2.vertices = deformed_mesh.vertices
+                        self.registered_ct_mesh_2.compute_vertex_normals()
+                        self.vis2.update_geometry(self.registered_ct_mesh_2)
+                     except:
+                        pass
+
                 if(self.extend == 1 ):
                     self.volumetric_near_point_cloud.points.extend(near_vpC_points.points)
                 else:
@@ -634,7 +713,75 @@ class PointCloudUpdater:
             self.vis.update_geometry(self.volumetric_far_point_cloud)
                 
 
-        
+        # ----- SIMULATE PROBE VIEW ------- #
+        if(self.registered_ct ==  1):
+            view_control = self.vis2.get_view_control()
+
+            # Set the camera view aligned with the x-axis
+            camera_parameters = view_control.convert_to_pinhole_camera_parameters()
+
+            # intrinsic = camera_parameters.intrinsic
+
+            T = TW_EM @ TEM_C
+
+            up = T[:3, 2]          # Z-axis (3rd column)
+            front = -T[:3, 0]      # Negative X-axis (1st column) - look forward or back
+            lookat = T[:3, 3]      # Translation vector (camera position)
+
+            print("is this changing??", T)
+
+            # view_control.set_up(up) # lock rotation
+            view_control.set_front(front)
+            view_control.set_lookat(lookat)
+
+            view_control.set_zoom(0.01)
+            # view_control.set_zoom(0.05)
+
+            # Define a transformation to align the camera along the x-axis
+            # camera_parameters.extrinsic = TW_EM @ TEM_C
+
+            # Synchronize the pinhole parameters with the current window size
+            # view_control.convert_from_pinhole_camera_parameters(camera_parameters)
+
+            self.vis2.poll_events()
+            self.vis2.update_renderer()
+
+        if(self.orifice_center_map == 1):
+
+            if(orifice_center_three_d_points is not None):           
+                
+                print("current branch pass", self.branch_pass)
+                
+
+                max_branch_pass = 255  # Set based on your application needs
+                normalized_pass = self.branch_pass / max_branch_pass  # Scale to [0, 1]
+                # scaled_colors = (normalized_pass * 255)
+                # normalized_pass = scaled_colors / 255.0
+            
+
+                max_branch_pixels = 2000.0
+                normalized_branch_pixels = branch_pixels / max_branch_pixels
+                # scaled_colors = (normalized_branch_pixels * 2000)
+                # normalized_branch_pixels = scaled_colors / 2000.0
+
+                # Create duplicated colors
+                duplicated_pass_colors = [[normalized_pass, normalized_branch_pixels, 0]]
+
+                # print("duplicated pass colors", duplicated_pass_colors)
+
+                # # Scale colors to [0, 255] and round to integers
+                
+
+
+                orifice_center_points = o3d.geometry.PointCloud()
+                orifice_center_points.points = o3d.utility.Vector3dVector(orifice_center_three_d_points)
+                orifice_center_points.transform(TW_EM @ TEM_C)
+              
+                orifice_center_points.colors = o3d.utility.Vector3dVector(duplicated_pass_colors)
+                self.orifice_center_point_cloud.points.extend(orifice_center_points.points)
+                self.orifice_center_point_cloud.colors.extend(orifice_center_points.colors)
+            
+            self.vis.update_geometry(self.orifice_center_point_cloud)  
 
         
         # ------ TRACKER FRAMES ------ #
@@ -664,7 +811,14 @@ class PointCloudUpdater:
 
         save_frequency = 1
 
-    
+        o3d.io.write_point_cloud(dataset_directory + pc_updater.dataset_name + bin_name +  "/volumetric_near_point_cloud.ply", pc_updater.volumetric_near_point_cloud)
+
+        o3d.io.write_point_cloud(dataset_directory + pc_updater.dataset_name + bin_name +  "/volumetric_far_point_cloud.ply", pc_updater.volumetric_far_point_cloud)
+
+        # o3d.io.write_point_cloud(dataset_directory + pc_updater.dataset_name + bin_name +  "/volumetric_full_lumen_point_cloud.ply", pc_updater.volumetric_full_lumen_point_cloud)
+
+        o3d.io.write_point_cloud(dataset_directory + pc_updater.dataset_name + bin_name +  "/orifice_center_pc.ply", pc_updater.orifice_center_point_cloud)
+
         if(self.record==1):
 
             folder_path = self.write_folder + '/grayscale_images'

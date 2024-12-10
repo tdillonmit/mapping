@@ -29,10 +29,12 @@ model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_traine
 vpC_map: 1 
 extend: 0
 tsdf_map: 0
+orifice_center_map: 1
 
 # non rigid icp registered ct scan for tracking
 registered_ct : 1
 registered_ct_dataset: full_inkbit_aorta_2
+live_deformation: 1
 
 # # esdf mapping
 # esdf_map : 0
