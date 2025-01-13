@@ -1,0 +1,22 @@
+<launch>
+  <!-- Include the first launch file -->
+  <include file="/home/tdillon/EM_tracker/src/ascension/launch/demo_aortascope.launch" />
+  <include file="/home/tdillon/usb_workspace/src/usb_cam/launch/usb_cam.launch" />
+    
+  <!-- the primary node for computation and visualization -->
+  <node name="open3d_visualizer" pkg="aortascope" type="mapping_real_time.py" output="screen" />
+
+  <!-- helpers -->
+  <node name="mapping_parameters_gui" pkg="aortascope" type="mapping_parameters_gui.py" output="screen" />
+  <node name="rgb_image_visualizer" pkg="aortascope" type="rgb_image_visualizer.py" output="screen" />
+
+  <!-- gating signal visualizer, complete this later -->
+  <node name="gating_visualizer_white_pump" pkg="aortascope" type="gating_signal_visualizer_white_pump.py" output="screen" />
+  
+  <!-- Launch rosserial node for Arduino communication -->
+  <!-- <node name="rosserial_node" pkg="rosserial_python" type="serial_node.py" output="screen"> -->
+    <!-- <param name="port" value="/dev/ttyACM0"/>    -->
+  <!-- </node> -->
+
+
+</launch>

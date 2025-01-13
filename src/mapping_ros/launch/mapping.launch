@@ -1,0 +1,16 @@
+<launch>
+  <!-- Include the first launch file -->
+  <include file="/home/tdillon/EM_tracker/src/ascension/launch/demo.launch" />
+  <include file="/home/tdillon/usb_workspace/src/usb_cam/launch/usb_cam.launch" />
+  
+  <!--node name="open3d_visualizer" pkg="mapping_ros" type="mapping.py" output="screen" -->
+  
+  <node name="open3d_visualizer" pkg="mapping_ros" type="mapping.py" output="screen">
+    <param name="image_path" type="str" value="$(arg image_path)" />
+  </node>
+  
+  <node name="binary_image_visualizer" pkg="mapping_ros" type="binary_image_visualizer.py" output="screen" />
+  <node name="rgb_image_visualizer" pkg="mapping_ros" type="rgb_image_visualizer.py" output="screen" />
+  <node name="mapping_parameters_gui" pkg="mapping_ros" type="mapping_parameters_gui.py" output="screen" />
+  <node name="rqt_image_view" pkg="rqt_image_view" type="rqt_image_view" args="/usb_cam/image_raw" output="screen" />
+</launch>

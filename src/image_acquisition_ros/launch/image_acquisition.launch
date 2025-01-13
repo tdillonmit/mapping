@@ -1,0 +1,9 @@
+<launch>
+  <!-- Include the first launch file -->
+  <include file="/home/tdillon/usb_workspace/src/usb_cam/launch/usb_cam-test.launch" />
+  <node name="image_acquisition" pkg="image_acquisition_ros" type="image_acquisition.py" output="screen">
+    <param name="image_path" type="str" value="$(arg image_path)" />
+  </node>
+  <node name="rqt_image_view" pkg="rqt_image_view" type="rqt_image_view" args="/usb_cam/image_raw" output="screen" />
+
+</launch>

@@ -1,0 +1,67 @@
+---
+# savepath : /home/tdillon/datasets/gating_test_data_2
+
+# savepath : /home/tdillon/datasets/hydrogel_phantom_far_lumen
+
+# savepath : /home/tdillon/datasets/philips_hydrogel
+
+# savepath : /home/tdillon/datasets/pig_aorta_1
+# saarduino-ide_2.3.3_Linux_64bitvepath : /home/tdillon/datasets/pig_aorta_3
+# savepath : /home/tdillon/datasets/pva_patient_5_with_ecg_shrunk
+# savepath : /home/tdillon/datasets/test_run
+# savepath : /home/tdillon/datasets/short_pva_branches_2
+# savepath : /home/tdillon/datasets/aneurysm_pre_stent
+# savepath : /home/tdillon/datasets/aneurysm_with_stent_no_holes
+# savepath : /home/tdillon/datasets/aneurysm_steering_no_holes
+# savepath : /home/tdillon/datasets/aneurysm_with_stent_holes
+# savepath : /home/tdillon/datasets/short_pva_branches_3_no_particles
+# savepath : /home/tdillon/datasets/short_pva_branches_4_no_particles_other_lumen
+savepath : /home/tdillon/datasets/pva_full_length_1
+
+# modelpath : 
+
+# is there an ECG signal?
+gating : 0
+
+# record or just visualize data?
+record : 1
+
+# healthy first return manual segmentation
+tsdf_map : 0
+
+# ML segmentation
+deeplumen_on : 1
+# model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/full_inkbit_aorta_2/weights.weights.h5
+model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/combined_dataset/weights.h5
+
+# mapping visualization parameters
+vpC_map: 1
+# extend: 1
+extend: 1
+tsdf_map: 0
+# orifice_center_map: 1
+orifice_center_map: 1
+
+
+# non rigid icp registered ct scan for tracking
+registered_ct : 0
+registered_ct_dataset: full_inkbit_aorta_16
+live_deformation: 0
+
+# # esdf mapping
+# esdf_map : 0
+
+# # parameterize dissection for correspondence algorithms
+# dissection_parameterize : 0
+
+# # apply smooothing to esdf mapping
+# esdf_smoothing : 0
+
+# # certainty coloring - visualize esdf weight metric
+# certainty_coloring : 0
+
+# # save masks and transforms in tum format for killing fusion Cuda repo
+# killingfusion_save: 0
+
+
+
