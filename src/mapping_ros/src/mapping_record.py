@@ -60,35 +60,35 @@ def preprocess_ivus_image(original_image,box_crop,circle_crop,text_crop,crosshai
 
     return result
 
-def load_default_values(file_path='/home/tdillon/mapping/calibration_parameters.yaml'):
-    with open(file_path, 'r') as stream:
+# def load_default_values(file_path='/home/tdillon/mapping/calibration_parameters.yaml'):
+#     with open(file_path, 'r') as stream:
         
-        default_values={}
+#         default_values={}
 
-        try:
-            all_parameters = yaml.safe_load(stream)
-            # Convert the loaded angle to radians if needed
-            if '/angle' in all_parameters:
-                default_values['/angle'] = all_parameters['/angle']
+#         try:
+#             all_parameters = yaml.safe_load(stream)
+#             # Convert the loaded angle to radians if needed
+#             if '/angle' in all_parameters:
+#                 default_values['/angle'] = all_parameters['/angle']
 
-            if '/threshold' in all_parameters:
-                default_values['/threshold'] = all_parameters['/threshold']
+#             if '/threshold' in all_parameters:
+#                 default_values['/threshold'] = all_parameters['/threshold']
 
-            if '/translation' in all_parameters:
-                default_values['/translation'] = all_parameters['/translation']
+#             if '/translation' in all_parameters:
+#                 default_values['/translation'] = all_parameters['/translation']
 
-            if '/scaling' in all_parameters:
-                default_values['/scaling'] = all_parameters['/scaling']
+#             if '/scaling' in all_parameters:
+#                 default_values['/scaling'] = all_parameters['/scaling']
 
-            if '/radial_offset' in all_parameters:
-                default_values['/radial_offset'] = all_parameters['/radial_offset']
+#             if '/radial_offset' in all_parameters:
+#                 default_values['/radial_offset'] = all_parameters['/radial_offset']
 
-            if '/oclock' in all_parameters:
-                default_values['/oclock'] = all_parameters['/oclock']
+#             if '/oclock' in all_parameters:
+#                 default_values['/oclock'] = all_parameters['/oclock']
             
-            return default_values
-        except yaml.YAMLError as exc:
-            print(exc)
+#             return default_values
+#         except yaml.YAMLError as exc:
+#             print(exc)
 
 def get_gridlines(centre_x,centre_y, no_points, crop_radius):
 

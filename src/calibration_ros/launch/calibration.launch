@@ -1,7 +1,7 @@
 <launch>
   <!-- Include the first launch file -->
-  <include file="/home/tdillon/EM_tracker/src/ascension_ros/launch/demo.launch" />
-  <include file="/home/tdillon/usb_workspace/src/usb_cam/launch/usb_cam-test.launch" />
+  <include file="/home/tdillon/EM_tracker/src/ascension/launch/demo.launch" />
+  <include file="/home/tdillon/usb_workspace/src/usb_cam/launch/usb_cam.launch" />
   <node name="open3d_visualizer" pkg="calibration_ros" type="calibration.py" output="screen" />
   <node name="binary_image_visualizer" pkg="calibration_ros" type="binary_image_visualizer.py" output="screen" />
   <node name="rgb_image_visualizer" pkg="calibration_ros" type="rgb_image_visualizer.py" output="screen" />

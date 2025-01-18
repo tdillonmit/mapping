@@ -130,7 +130,7 @@ def save_parameters_on_shutdown():
 
     print("Saving rospy calibration parameters")
     # Save the parameters to a YAML file
-    with open('/home/tdillon/mapping/calibration_parameters_ivus.yaml', 'w') as file:
+    with open('/home/tdillon/mapping/src/calibration_parameters_ivus.yaml', 'w') as file:
         yaml.dump(param_values, file)
 
 def align_vectors(a, b):
@@ -430,7 +430,7 @@ class PointCloudUpdater:
         model_mseh = model_mesh.scale(0.001,center=[0,0,0])
 
      
-
+        # COMPUTE REGISTRATION
         while not rospy.is_shutdown():
             try:
                 if self.tf_buffer.can_transform('ascension_origin', 'target2', rospy.Time(0)):
@@ -461,6 +461,9 @@ class PointCloudUpdater:
         # model_2_position=np.asarray([0.665,0.55,-0.9])*10
         # model=one_fiducial_model_registration(model_mesh,fiducial_1, model_1_position, self.vis.add_geometry(self.em_1_frame))
         model=revised_fiducial_model_registration(model_mesh,fiducial_1, model_1_position, self.vis.add_geometry(self.em_1_frame))
+
+        # LOAD PRIOR REGISTRATION
+        # model = load_previous_registration
         
         self.vis.add_geometry(self.spheres)
         self.vis.add_geometry(self.point_cloud)
@@ -516,14 +519,6 @@ class PointCloudUpdater:
         # cv2.namedWindow('ImageWindow', cv2.WINDOW_NORMAL)
 
 
-    # def image_processing_and_visualization(self):
-    #     while self.visualization_running:
-    #         if hasattr(self, 'latest_binary_image'):
-    #             # Display the binary image (not blocking)
-    #             cv2.imshow('Binary Image', self.latest_binary_image)
-
-    #     # Cleanup when the thread exits
-    #     cv2.destroyAllWindows()
 
 
         # for simulation
@@ -533,6 +528,10 @@ class PointCloudUpdater:
         # Use glob to find all .npy files in the folder
         npy_files = glob.glob(os.path.join(folder_path, '*.npy'))
         self.file_count = len(npy_files)
+
+        print("finished init")
+        print("self box crop is", self.box_crop)
+
 
 
     def image_callback(self, msg):
@@ -805,16 +804,23 @@ class PointCloudUpdater:
             
 
 if __name__ == '__main__':
-    try:
-        print("started main function")
-        rospy.sleep(2.0)
-        rospy.init_node('open3d_visualizer')
-        # fiducial_ = self.tf_buffer.lookup_transform('ascension_origin','target2', rospy.Duration(0))
-        print("initialization successful, back in main function")
-        pc_updater = PointCloudUpdater()
-        rospy.on_shutdown(save_parameters_on_shutdown)
-        rospy.spin()
+    # try:
+
+    rospy.init_node('open3d_visualizer')
+    pc_updater = PointCloudUpdater()        
+    # rospy.on_shutdown(pc_updater.save_image_and_transform_data)
+    rospy.on_shutdown(save_parameters_on_shutdown)
+    rospy.spin()
+
+        # print("started main function")
+        # rospy.sleep(2.0)
+        # rospy.init_node('open3d_visualizer')
+        # # fiducial_ = self.tf_buffer.lookup_transform('ascension_origin','target2', rospy.Duration(0))
+        # print("initialization successful, back in main function")
+        # pc_updater = PointCloudUpdater()
         
-    except rospy.ROSInterruptException:
-        self.vis.destroy_window()
-        pass
+        # rospy.spin()
+        
+    # except rospy.ROSInterruptException:
+    #     self.vis.destroy_window()
+    #     pass

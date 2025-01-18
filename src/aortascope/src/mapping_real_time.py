@@ -450,6 +450,24 @@ class PointCloudUpdater:
             funsr_done = rospy.get_param('funsr_done', 0)
             time.sleep(1)
 
+    def registration_started(self):
+
+        rospy.set_param('registration_started', 0)
+        self.write_folder = rospy.get_param('dataset', 0)
+        self.deeplumen_on = 0
+        tf.keras.backend.clear_session()
+        tf.compat.v1.reset_default_graph()
+        del self.model
+        cuda.select_device(0)
+        cuda.close()
+        gc.collect()
+        
+        print("cleared session!")
+        registration_done = 0
+        while(registration_done ==0):
+            registration_done = rospy.get_param('registration_done', 0)
+            time.sleep(1)
+
     def prompt_for_folder(self):
         # Create a Tkinter root window (it won't show)
         root2 = tk.Tk()
@@ -571,12 +589,13 @@ class PointCloudUpdater:
             
         while(self.write_folder ==None):
             self.write_folder = self.prompt_for_folder()
+            
         # superimpose the completed surface geometry
-        ivus_funsr_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/full_lumen_mesh.ply')
-        ivus_funsr_lineset = create_wireframe_lineset_from_mesh(ivus_funsr_mesh)
-        ivus_funsr_lineset.paint_uniform_color([0,0,0])
-        self.vis.add_geometry(ivus_funsr_lineset)
-        self.vis2.add_geometry(ivus_funsr_mesh)
+        # ivus_funsr_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/full_lumen_mesh.ply')
+        # ivus_funsr_lineset = create_wireframe_lineset_from_mesh(ivus_funsr_mesh)
+        # ivus_funsr_lineset.paint_uniform_color([0,0,0])
+        # self.vis.add_geometry(ivus_funsr_lineset)
+        # self.vis2.add_geometry(ivus_funsr_mesh)
 
         self.deeplumen_on = 1
         self.initialize_deeplumen_model()
@@ -615,6 +634,7 @@ class PointCloudUpdater:
 
 
         self.deeplumen_on = 1
+        self.initialize_deeplumen_model()
 
 
         
@@ -638,7 +658,11 @@ class PointCloudUpdater:
         
             self.centerline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc.ply')
 
-        
+            # SMOOTHING MESH AS IMPORTED!!
+            self.registered_ct_mesh = self.registered_ct_mesh.filter_smooth_taubin(number_of_iterations=20)
+            self.registered_ct_lineset = create_wireframe_lineset_from_mesh(self.registered_ct_mesh)
+            #END
+
             self.registered_ct_lineset.paint_uniform_color([0,0,0])
 
             self.registered_ct_mesh_2 = copy.deepcopy(self.registered_ct_mesh)
@@ -659,10 +683,12 @@ class PointCloudUpdater:
 
 
     def switch_probe_view(self):
+        print("switched_frames")
         # just switch the transform you fetch
         if(self.dest_frame == 'target1'):
             self.dest_frame = 'target2'
-        if (self.dest_frame == 'target2'):
+
+        elif (self.dest_frame == 'target2'):
             self.dest_frame = 'target1'
     
 
@@ -698,6 +724,8 @@ class PointCloudUpdater:
         # Assuming you have the frame IDs for your transform
         ref_frame = 'ascension_origin'
         dest_frame = self.dest_frame
+
+        print("dest frame is", self.dest_frame)
 
         try:
             # Lookup transform
@@ -774,12 +802,17 @@ class PointCloudUpdater:
             self.funsr_done()
             rospy.set_param('funsr_done', 0)
 
+        registration_start = rospy.get_param('registration_started', 0)
+        if(registration_start == 1):
+            self.registration_started()
+            rospy.set_param('registration_started', 0)
+
         reg_complete = rospy.get_param('registration_done', 0)
         if(reg_complete == 1):
             self.tracking()
             rospy.set_param('registration_done', 0)
 
-        switch_probe = rospy.get_param('switch_probe', 1)
+        switch_probe = rospy.get_param('switch_probe', 0)
         if(switch_probe == 1):
             self.switch_probe_view()
             rospy.set_param('switch_probe', 0)
@@ -1071,7 +1104,7 @@ class PointCloudUpdater:
         radial_offset=self.default_values['/radial_offset'] 
         oclock=self.default_values['/oclock'] 
 
-
+        print("angle is", angle)
         TEM_C = [[1,0,0,translation],[0,np.cos(angle),-np.sin(angle),radial_offset*np.cos(oclock)],[0,np.sin(angle),np.cos(angle),radial_offset*np.sin(oclock)],[0, 0, 0, 1]]
 
         
@@ -1237,7 +1270,7 @@ class PointCloudUpdater:
             front = -T[:3, 0]      # Negative X-axis (1st column) - look forward or back
             lookat = T[:3, 3]      # Translation vector (camera position)
 
-            print("is this changing??", T)
+            # print("is this changing??", T)
 
             # view_control.set_up(up) # lock rotation
             view_control.set_front(front)

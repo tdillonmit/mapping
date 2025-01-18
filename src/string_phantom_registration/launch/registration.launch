@@ -1,6 +1,6 @@
 <launch>
   <!-- Include the first launch file -->
-  <include file="/home/tdillon/EM_tracker/src/ascension_ros/launch/demo.launch" />
+  <include file="/home/tdillon/EM_tracker/src/ascension/launch/demo.launch" />
   <!-- <include file="/home/tdillon/usb_workspace/src/usb_cam/launch/usb_cam-test.launch" /> -->
   <node name="open3d_visualizer" pkg="string_phantom_registration" type="registration.py" output="screen" />
   <!-- <node name="binary_image_visualizer" pkg="calibration_ros" type="binary_image_visualizer.py" output="screen" /> -->

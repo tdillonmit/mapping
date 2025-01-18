@@ -1,5 +1,5 @@
 import rospy
-from tkinter import Tk, Label, Scale, Button, IntVar, filedialog, ttk
+from tkinter import Tk, Label, Scale, Button, IntVar, filedialog, ttk, BooleanVar, Checkbutton
 import numpy as np
 import time
 import sys
@@ -77,14 +77,23 @@ def load_previous_registration():
 
 def call_register():
     
+    rospy.set_param("registration_started", 1)
     #complete this function
     dataset = rospy.get_param('dataset', 0)
     if(dataset ==0):
         select_folder()
     dataset = rospy.get_param('dataset', 0)
-    call_registration_indirectly(dataset)
+
+    # visualize = checkbox_var.get()
+    visualize = 0
+    root.percent.config(text = "Computing Registration")
+    root.update_idletasks()
+    call_registration_indirectly(dataset, visualize)
+    root.percent.config(text = "Registration Complete")
+    root.update_idletasks()
     
     
+
 
 def switch_probe():
     rospy.set_param('switch_probe', 1)
@@ -187,24 +196,28 @@ try:
     record_button = Button(root, text="Start Recording", font=button_font, width=button_width, height=button_height, command=start_record)
     record_button.grid(row=2, column=0, padx=padding_x, pady=padding_y)
 
-    start_button = Button(root, text="Start Pullback", font=button_font, width=button_width, height=button_height, command=start_record)
+    start_button = Button(root, text="Start Pullback Device", font=button_font, width=button_width, height=button_height, command=start_record)
     start_button.grid(row=3, column=0, padx=padding_x, pady=padding_y)
 
-    stop_button = Button(root, text="Stop Pullback", font=button_font, width=button_width, height=button_height, command=start_record)
+    stop_button = Button(root, text="Stop Pullback Device", font=button_font, width=button_width, height=button_height, command=start_record)
     stop_button.grid(row=4, column=0, padx=padding_x, pady=padding_y)
 
     save_data_button = Button(root, text="Finish Recording", font=button_font, width=button_width, height=button_height, command=save_data)
     save_data_button.grid(row=5, column=0, padx=padding_x, pady=padding_y)
 
     # Additional buttons
-    funsr_button = Button(root, text="Extract Surface Geometry", font=button_font, width=button_width, height=button_height, command = call_funsr)
+    funsr_button = Button(root, text="Initialize Surface Registration", font=button_font, width=button_width, height=button_height, command = call_funsr)
     funsr_button.grid(row=6, column=0, padx=padding_x, pady=padding_y)
 
-    load_button = Button(root, text="Load Surface Geometry", font=button_font, width=button_width, height=button_height, command = load_previous_surface_geometry)
+    load_button = Button(root, text="Load Previous Initialization", font=button_font, width=button_width, height=button_height, command = load_previous_surface_geometry)
     load_button.grid(row=7, column=0, padx=padding_x, pady=padding_y)
 
     register_button = Button(root, text="Register Preoperative Scan", font=button_font, width=button_width, height=button_height, command = call_register)
     register_button.grid(row=8, column=0, padx=padding_x, pady=padding_y)
+
+    # checkbox_var = BooleanVar()
+    # checkbox = Checkbutton(root, text="Debug", variable=checkbox_var)
+    # checkbox.grid(row=8, column=1,  columnspan=2, padx=0, pady=0)
 
     load_register = Button(root, text="Load Previously Registered Scan", font=button_font, width=button_width, height=button_height, command = load_previous_registration)
     load_register.grid(row=9, column=0, padx=padding_x, pady=padding_y)
