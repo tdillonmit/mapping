@@ -56,6 +56,8 @@ def call_funsr():
 
     # Run FUNSR in parallel (non-blocking)
     time.sleep(1)
+    root.percent.config(text = "Initializing surface ..")
+    root.update_idletasks()
     run_normalizedSpace.run_funsr(dataset, root)
     # script_dir = os.path.dirname(os.path.abspath(__file__))
     # os.chdir(script_dir)

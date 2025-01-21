@@ -1,0 +1,5 @@
+Symlinking /home/tdillon/mapping/devel/lib/pkgconfig/string_phantom_registration.pc
+Symlinking /home/tdillon/mapping/devel/lib/string_phantom_registration/registration.py
+Symlinking /home/tdillon/mapping/devel/lib/string_phantom_registration/cmake.lock
+Symlinking /home/tdillon/mapping/devel/share/string_phantom_registration/cmake/string_phantom_registrationConfig-version.cmake
+Symlinking /home/tdillon/mapping/devel/share/string_phantom_registration/cmake/string_phantom_registrationConfig.cmake

@@ -1,0 +1,1 @@
+/home/tdillon/mapping/devel/.private/gating_data_collection/lib/pkgconfig/gating_data_collection.pc

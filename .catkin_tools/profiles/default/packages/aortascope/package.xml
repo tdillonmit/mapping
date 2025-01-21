@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>aortascope</name>
+  <version>0.0.1</version>
+  <description>mapping, registration, and real time steering guidance for target vessel cannulation. EVAR deployment simulation to be added</description>
+
+  <maintainer email="tdillon@mit.edu">Tom Dillon</maintainer>
+
+  <license>MIT</license> <!-- Replace with the actual license type -->
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>numpy</exec_depend>  <!-- Add this line for NumPy -->
+  <exec_depend>std_msgs</exec_depend> <!-- Moved to exec_depend -->
+
+  
+</package>
+
+

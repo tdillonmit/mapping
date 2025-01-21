@@ -1,0 +1,8 @@
+prefix=/home/tdillon/mapping/devel/.private/calibration_ros
+
+Name: calibration_ros
+Description: Description of calibration_ros
+Version: 0.0.1
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

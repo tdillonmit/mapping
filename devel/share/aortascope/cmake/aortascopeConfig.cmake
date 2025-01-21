@@ -1,0 +1,1 @@
+/home/tdillon/mapping/devel/.private/aortascope/share/aortascope/cmake/aortascopeConfig.cmake

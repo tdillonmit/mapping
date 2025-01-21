@@ -1,0 +1,1 @@
+/home/tdillon/mapping/devel/.private/string_phantom_registration/lib/pkgconfig/string_phantom_registration.pc

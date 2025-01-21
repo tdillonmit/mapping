@@ -1,0 +1,8 @@
+Symlinking /home/tdillon/mapping/devel/lib/pkgconfig/mapping_ros.pc
+Symlinking /home/tdillon/mapping/devel/lib/mapping_ros/mapping.py
+Symlinking /home/tdillon/mapping/devel/lib/mapping_ros/rgb_image_visualizer.py
+Symlinking /home/tdillon/mapping/devel/lib/mapping_ros/mapping_parameters_gui.py
+Symlinking /home/tdillon/mapping/devel/lib/mapping_ros/binary_image_visualizer.py
+Symlinking /home/tdillon/mapping/devel/lib/mapping_ros/cmake.lock
+Symlinking /home/tdillon/mapping/devel/share/mapping_ros/cmake/mapping_rosConfig.cmake
+Symlinking /home/tdillon/mapping/devel/share/mapping_ros/cmake/mapping_rosConfig-version.cmake

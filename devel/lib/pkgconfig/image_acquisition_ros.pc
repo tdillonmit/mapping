@@ -1,0 +1,1 @@
+/home/tdillon/mapping/devel/.private/image_acquisition_ros/lib/pkgconfig/image_acquisition_ros.pc

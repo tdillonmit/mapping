@@ -20,6 +20,7 @@ model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_traine
 
 # mapping visualization parameters
 vpC_map: 1
+bpC_map: 1
 extend: 0
 tsdf_map: 0
 orifice_center_map: 1

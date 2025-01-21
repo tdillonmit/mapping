@@ -8,6 +8,7 @@ gating : 0
 
 # record or just visualize data?
 record : 0
+record_poses: 1
 
 # healthy first return manual segmentation
 tsdf_map : 0
@@ -19,6 +20,7 @@ model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_traine
 
 # mapping visualization parameters
 vpC_map: 1
+bpC_map: 0
 extend: 0
 tsdf_map: 0
 orifice_center_map: 0

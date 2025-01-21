@@ -1,0 +1,10 @@
+mapping_ros
+/home/tdillon/mapping/devel/.private/mapping_ros/cmake.lock /home/tdillon/mapping/devel/./cmake.lock
+/home/tdillon/mapping/devel/.private/mapping_ros/lib/pkgconfig/mapping_ros.pc /home/tdillon/mapping/devel/lib/pkgconfig/mapping_ros.pc
+/home/tdillon/mapping/devel/.private/mapping_ros/lib/mapping_ros/mapping.py /home/tdillon/mapping/devel/lib/mapping_ros/mapping.py
+/home/tdillon/mapping/devel/.private/mapping_ros/lib/mapping_ros/rgb_image_visualizer.py /home/tdillon/mapping/devel/lib/mapping_ros/rgb_image_visualizer.py
+/home/tdillon/mapping/devel/.private/mapping_ros/lib/mapping_ros/mapping_parameters_gui.py /home/tdillon/mapping/devel/lib/mapping_ros/mapping_parameters_gui.py
+/home/tdillon/mapping/devel/.private/mapping_ros/lib/mapping_ros/binary_image_visualizer.py /home/tdillon/mapping/devel/lib/mapping_ros/binary_image_visualizer.py
+/home/tdillon/mapping/devel/.private/mapping_ros/lib/mapping_ros/cmake.lock /home/tdillon/mapping/devel/lib/mapping_ros/cmake.lock
+/home/tdillon/mapping/devel/.private/mapping_ros/share/mapping_ros/cmake/mapping_rosConfig.cmake /home/tdillon/mapping/devel/share/mapping_ros/cmake/mapping_rosConfig.cmake
+/home/tdillon/mapping/devel/.private/mapping_ros/share/mapping_ros/cmake/mapping_rosConfig-version.cmake /home/tdillon/mapping/devel/share/mapping_ros/cmake/mapping_rosConfig-version.cmake

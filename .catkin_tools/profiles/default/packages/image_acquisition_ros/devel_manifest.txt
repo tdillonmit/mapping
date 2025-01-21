@@ -1,0 +1,7 @@
+image_acquisition_ros
+/home/tdillon/mapping/devel/.private/image_acquisition_ros/cmake.lock /home/tdillon/mapping/devel/./cmake.lock
+/home/tdillon/mapping/devel/.private/image_acquisition_ros/lib/image_acquisition_ros/cmake.lock /home/tdillon/mapping/devel/lib/image_acquisition_ros/cmake.lock
+/home/tdillon/mapping/devel/.private/image_acquisition_ros/lib/image_acquisition_ros/image_acquisition.py /home/tdillon/mapping/devel/lib/image_acquisition_ros/image_acquisition.py
+/home/tdillon/mapping/devel/.private/image_acquisition_ros/lib/pkgconfig/image_acquisition_ros.pc /home/tdillon/mapping/devel/lib/pkgconfig/image_acquisition_ros.pc
+/home/tdillon/mapping/devel/.private/image_acquisition_ros/share/image_acquisition_ros/cmake/image_acquisition_rosConfig-version.cmake /home/tdillon/mapping/devel/share/image_acquisition_ros/cmake/image_acquisition_rosConfig-version.cmake
+/home/tdillon/mapping/devel/.private/image_acquisition_ros/share/image_acquisition_ros/cmake/image_acquisition_rosConfig.cmake /home/tdillon/mapping/devel/share/image_acquisition_ros/cmake/image_acquisition_rosConfig.cmake

@@ -1,0 +1,2 @@
+- setup-file:
+    local-name: /home/tdillon/mapping/devel/.private/mapping_ros/setup.sh

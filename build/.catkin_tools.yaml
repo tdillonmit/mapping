@@ -1,0 +1,6 @@
+devel_space: /home/tdillon/mapping/devel
+install: false
+install_space: /home/tdillon/mapping/install
+profile: default
+source_space: /home/tdillon/mapping/src
+workspace: /home/tdillon/mapping

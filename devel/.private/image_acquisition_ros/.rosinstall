@@ -1,0 +1,2 @@
+- setup-file:
+    local-name: /home/tdillon/mapping/devel/.private/image_acquisition_ros/setup.sh

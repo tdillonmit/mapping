@@ -1,0 +1,8 @@
+prefix=/home/tdillon/mapping/install
+
+Name: mapping_ros
+Description: Description of mapping_ros
+Version: 0.0.1
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

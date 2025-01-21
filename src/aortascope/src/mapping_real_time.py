@@ -91,6 +91,8 @@ class PointCloudUpdater:
         else:
             self.vis.create_window(window_name="3D Reconstruction", width = int(self.width_scaling*1765), height = int(self.height_scaling*3000), left = int(self.width_scaling*2080), top = int(self.height_scaling*0))  # Custom window title
 
+        
+
         self.vis.get_render_option().mesh_show_back_face = True
         self.vis.poll_events()
         self.vis.update_renderer()
@@ -110,6 +112,7 @@ class PointCloudUpdater:
         self.dissection_flap_point_cloud = o3d.geometry.PointCloud()
         self.volumetric_far_point_cloud = o3d.geometry.PointCloud() 
         self.volumetric_near_point_cloud = o3d.geometry.PointCloud() 
+        self.boundary_near_point_cloud = o3d.geometry.PointCloud() 
         self.point_cloud = o3d.geometry.PointCloud()
         self.orifice_center_point_cloud = o3d.geometry.PointCloud()
 
@@ -119,6 +122,7 @@ class PointCloudUpdater:
         # self.vis.add_geometry(self.dissection_flap_point_cloud)
         self.vis.add_geometry(self.volumetric_near_point_cloud)
         self.vis.add_geometry(self.volumetric_far_point_cloud)
+        self.vis.add_geometry(self.boundary_near_point_cloud)
         # self.vis.add_geometry(self.point_cloud)
         self.vis.add_geometry(self.orifice_center_point_cloud)
 
@@ -126,21 +130,27 @@ class PointCloudUpdater:
 
         # ----- INITIALIZE TRACKER FRAMES ------ #
         self.frame_scaling=0.025
-        self.tracker_frame=o3d.geometry.TriangleMesh.create_coordinate_frame()
-        self.tracker_frame.scale(self.frame_scaling,center=[0,0,0])
+        # self.tracker_frame=o3d.geometry.TriangleMesh.create_coordinate_frame()
+        # self.tracker_frame.scale(self.frame_scaling,center=[0,0,0])
 
         self.baseframe=o3d.geometry.TriangleMesh.create_coordinate_frame()
         self.baseframe.scale(self.frame_scaling,center=[0,0,0])
 
         self.us_frame=o3d.geometry.TriangleMesh.create_coordinate_frame()
         self.us_frame.scale(self.frame_scaling,center=[0,0,0])
+
+        self.catheter = o3d.geometry.TriangleMesh.create_cylinder(radius=0.0015, height=0.01)
+        self.catheter.compute_vertex_normals()
+        self.catheter.paint_uniform_color([0,0,1])
         
         self.previous_transform=np.eye(4)
         self.previous_transform_1=np.eye(4)
         self.previous_transform_us=np.eye(4)
+        self.previous_catheter_transform=np.eye(4)
 
+        self.vis.add_geometry(self.catheter)
         self.vis.add_geometry(self.us_frame)
-        self.vis.add_geometry(self.tracker_frame)
+        # self.vis.add_geometry(self.tracker_frame)
         self.vis.add_geometry(self.baseframe)
 
     
@@ -348,6 +358,8 @@ class PointCloudUpdater:
         # save data?
         self.record = config_yaml['record']
 
+        self.record_poses =0
+
         # healthy first return mapping for reference
         self.tsdf_map = config_yaml['tsdf_map']
 
@@ -356,6 +368,8 @@ class PointCloudUpdater:
         self.model_path  = config_yaml['model_path']
 
         self.vpC_map = config_yaml['vpC_map']
+
+        self.bpC_map = config_yaml['bpC_map']
 
         # dont load extend
         # self.extend = config_yaml['extend']
@@ -468,6 +482,8 @@ class PointCloudUpdater:
             registration_done = rospy.get_param('registration_done', 0)
             time.sleep(1)
 
+
+
     def prompt_for_folder(self):
         # Create a Tkinter root window (it won't show)
         root2 = tk.Tk()
@@ -516,6 +532,9 @@ class PointCloudUpdater:
         o3d.io.write_point_cloud(self.write_folder +  "/volumetric_far_point_cloud.ply", pc_updater.volumetric_far_point_cloud)
 
         o3d.io.write_point_cloud(self.write_folder +  "/orifice_center_pc.ply", pc_updater.orifice_center_point_cloud)
+
+        # for evaluation purposes
+        o3d.io.write_point_cloud(self.write_folder +  "/boundary_near_point_cloud.ply", pc_updater.boundary_near_point_cloud)
 
 
         save_frequency = 1 #doesnt work with ecg etc
@@ -577,6 +596,52 @@ class PointCloudUpdater:
 
         return
 
+
+    def save_pose_data(self):
+
+    
+        # turn extend off!
+        self.extend = 0
+        self.record = 0
+        
+
+        time.sleep(1)
+
+        print("saving poses!")
+
+        # is self.write_folder the same as these long paths:
+        # dataset_directory + pc_updater.dataset_name + bin_name 
+
+        
+
+        save_frequency = 1 #doesnt work with ecg etc
+
+        # dataset saving
+        # if(self.record==1):
+
+        print("creating folders!")
+
+        folder_path = self.write_folder + '/pose_data'
+        create_folder(folder_path)
+
+       
+
+    
+        print("started saving")
+        # Iterate through the image and TW_EM batches simultaneously
+        for i, (grayscale_image, TW_EM) in enumerate(zip(self.image_batch, self.tw_em_batch)):
+       
+        
+
+            # Save the TW_EM data
+            tw_em_filename = f'{self.write_folder}/pose_data/TW_EM_{self.image_call + i}.npy'
+            with open(tw_em_filename, 'wb') as f:
+                np.save(f, TW_EM)
+
+
+
+
+        return
         
 
     
@@ -609,6 +674,8 @@ class PointCloudUpdater:
 
         self.write_folder = rospy.get_param('dataset', 0) 
 
+        self.deeplumen_on = 0
+
         if(self.write_folder ==0):
             self.write_folder = self.prompt_for_folder()
             
@@ -626,15 +693,20 @@ class PointCloudUpdater:
             print("no geometries to delete")
 
         
+        
+        
+        
+        
 
   
         self.volumetric_far_point_cloud = o3d.geometry.PointCloud() 
         self.volumetric_near_point_cloud = o3d.geometry.PointCloud() 
+        self.boundary_near_point_cloud = o3d.geometry.PointCloud() 
    
 
-
-        self.deeplumen_on = 1
-        self.initialize_deeplumen_model()
+        # try healthy lumen tracking for live deformation!!
+        
+        # self.initialize_deeplumen_model()
 
 
         
@@ -643,6 +715,10 @@ class PointCloudUpdater:
             config_yaml = yaml.safe_load(file)
 
         self.load_parameters(config_yaml)
+
+        self.record_poses = 1
+        if(self.record_poses):
+            self.pose_batch=[]
 
         # GUI SPECIFIC
 
@@ -655,21 +731,29 @@ class PointCloudUpdater:
 
             ct_centroid_pc = o3d.io.read_point_cloud(self.write_folder + '/side_branch_centrelines.ply')
             self.constraint_locations = np.asarray(ct_centroid_pc.points)
-        
+            # self.ct_centroids = np.load(self.write_folder + '/ct_centroids.npy')
+
+            # NOte that ivus centroids have been used here!!!
+            self.ct_centroids = np.load(self.write_folder + '/ivus_centroids.npy')
+            self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.004, 10, [0,1,0])
             self.centerline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc.ply')
 
             # SMOOTHING MESH AS IMPORTED!!
-            self.registered_ct_mesh = self.registered_ct_mesh.filter_smooth_taubin(number_of_iterations=20)
-            self.registered_ct_lineset = create_wireframe_lineset_from_mesh(self.registered_ct_mesh)
+            # self.registered_ct_mesh = self.registered_ct_mesh.filter_smooth_taubin(number_of_iterations=100)
+            # self.registered_ct_lineset = create_wireframe_lineset_from_mesh(self.registered_ct_mesh)
             #END
 
             self.registered_ct_lineset.paint_uniform_color([0,0,0])
 
             self.registered_ct_mesh_2 = copy.deepcopy(self.registered_ct_mesh)
             self.registered_ct_mesh_2.compute_vertex_normals()
+
+            self.vis2.add_geometry(self.ct_spheres)
             self.vis2.add_geometry(self.registered_ct_mesh_2)
 
             self.vis.add_geometry(self.registered_ct_lineset)
+
+            self.vis.add_geometry(self.ct_spheres)
             
             
             print("registered the ct from non rigid icp!!")
@@ -678,8 +762,8 @@ class PointCloudUpdater:
             self.constraint_radius=self.default_values['/constraint_radius'] 
             self.constraint_locations = np.vstack((self.constraint_locations,np.asarray(self.centerline_pc.points)[0,:],np.asarray(self.centerline_pc.points)[-1,:]))
             self.constraint_indices = get_all_nodes_inside_radius(self.constraint_locations, self.constraint_radius, self.registered_ct_mesh)
-            test_pc= o3d.geometry.PointCloud() 
-            test_pc.points = o3d.utility.Vector3dVector(np.asarray(self.registered_ct_mesh.vertices)[self.constraint_indices,:])
+            # test_pc= o3d.geometry.PointCloud() 
+            # test_pc.points = o3d.utility.Vector3dVector(np.asarray(self.registered_ct_mesh.vertices)[self.constraint_indices,:])
 
 
     def switch_probe_view(self):
@@ -687,14 +771,39 @@ class PointCloudUpdater:
         # just switch the transform you fetch
         if(self.dest_frame == 'target1'):
             self.dest_frame = 'target2'
+            self.deeplumen_on = 0
+            self.live_deformation = 0
 
         elif (self.dest_frame == 'target2'):
             self.dest_frame = 'target1'
+
+    def get_catheter_transform(self,TW_EM):
+
+        T_shift = np.eye(4)
+        T_shift[:3,3] = np.asarray([0.002,0.0012,0.01])
+
+    
+        direction = TW_EM[:3, 0]
+        cylinder_z_axis = np.array([0, 0, 1])
+        rotation_axis = np.cross(cylinder_z_axis, direction)
+        rotation_angle = np.arccos(np.dot(cylinder_z_axis, direction))
+        rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
+        rotation_matrix = o3d.geometry.get_rotation_matrix_from_axis_angle(rotation_axis * rotation_angle)
+
+        T_transformation = np.eye(4)
+        T_transformation[:3,:3]= rotation_matrix
+        T_transformation[:3,3] = TW_EM[:3,3]
+        
+        T_catheter = T_transformation @ T_shift
+
+        return T_catheter
     
 
     def close_app(self):
         cv2.destroyAllWindows()
         rospy.signal_shutdown('User quitted')
+
+    
         
 
 
@@ -766,8 +875,12 @@ class PointCloudUpdater:
             self.tw_em_batch.append(TW_EM)
             self.image_times.append(image_timestamp_in_seconds)
 
+        if(self.record_poses==1):
+
+            self.pose_batch.append(TW_EM)
+
         # for computational efficiency, stop here and do all processing / reconstruction later
-        if(self.tsdf_map != 1 and self.vpC_map != 1):
+        if(self.tsdf_map != 1 and self.vpC_map != 1 and self.bpC_map!=1):
             pass
 
         # fetch rospy parameters for real time mapping (could be placed in initialization)
@@ -943,8 +1056,6 @@ class PointCloudUpdater:
 
                 # ------ FIND ORIFICE PIXELS ------- #
                 
-                
-
                 # ensure that masks are well separated
                 kernel = np.ones((self.minimum_thickness, self.minimum_thickness), np.uint8)  # You can adjust the kernel size for the dilation effect
                 dilated_mask_1 = cv2.dilate(mask_1, kernel, iterations=1)
@@ -1097,6 +1208,10 @@ class PointCloudUpdater:
             volumetric_three_d_points_near_lumen = get_single_point_cloud_from_mask(mask_1, scaling)
             volumetric_three_d_points_far_lumen = get_single_point_cloud_from_mask(mask_2, scaling) 
 
+        if self.bpC_map == 1:
+            #for evaluation of surface accuracy at the end
+            boundary_three_d_points_near_lumen = get_single_point_cloud_from_pixels(mask_1_contour, scaling)
+
         # ---- KINEMATICS ---- #
 
         angle=self.default_values['/angle'] 
@@ -1241,18 +1356,52 @@ class PointCloudUpdater:
 
                 #downsample volumetric point cloud
                 far_vpC_points = far_vpC_points.voxel_down_sample(voxel_size=0.0005)
-      
-
                 far_vpC_points.transform(TW_EM @ TEM_C)
+
+
+                # for results evaluation
+                max_branch_pass = 255  # Set based on your application needs
+                normalized_pass = self.branch_pass / max_branch_pass  # Scale to [0, 1]
+                max_branch_pixels = 2000.0
+                normalized_branch_pixels = branch_pixels / max_branch_pixels
+                duplicated_pass_colors = np.repeat([[normalized_pass, normalized_branch_pixels, 0]], len(far_vpC_points.points), axis=0)
+
+ 
+                far_vpC_points.colors = o3d.utility.Vector3dVector(duplicated_pass_colors)
+
+
                 if(self.extend == 1):
                     self.volumetric_far_point_cloud.points.extend(far_vpC_points.points)
+                    self.volumetric_far_point_cloud.colors.extend(far_vpC_points.colors)
                 else:
                     self.volumetric_far_point_cloud.points = far_vpC_points.points
+                    self.volumetric_far_point_cloud.colors = far_vpC_points.colors
+
                 self.volumetric_far_point_cloud.paint_uniform_color([0,0,1])
+
 
             # self.vis.update_geometry(self.point_cloud)
             self.vis.update_geometry(self.volumetric_near_point_cloud)
             self.vis.update_geometry(self.volumetric_far_point_cloud)
+
+        if(self.bpC_map == 1):
+            if(boundary_three_d_points_near_lumen is not None):
+                near_bpC_points=o3d.geometry.PointCloud()
+                near_bpC_points.points=o3d.utility.Vector3dVector(boundary_three_d_points_near_lumen)
+
+                # downsample volumetric point cloud
+                near_bpC_points = near_bpC_points.voxel_down_sample(voxel_size=0.0005)
+                near_bpC_points.transform(TW_EM @ TEM_C)
+
+                if(self.extend == 1 ):
+                    self.boundary_near_point_cloud.points.extend(near_bpC_points.points)
+                else:
+                    self.boundary_near_point_cloud.points = near_bpC_points.points
+                self.boundary_near_point_cloud.paint_uniform_color([1,0,0])
+
+ 
+
+        
                 
 
         # ----- SIMULATE PROBE VIEW ------- #
@@ -1298,8 +1447,29 @@ class PointCloudUpdater:
                 camera_parameters_1 = view_control_1.convert_to_pinhole_camera_parameters()
                 points = np.asarray(self.volumetric_near_point_cloud.points)  # Convert point cloud to numpy array
                 centroid = np.mean(points, axis=0) 
-                lookat = centroid
+                position_tracker = TW_EM[:3,3]
+                average_point = (centroid+position_tracker)/2
+                lookat = average_point
                 view_control_1.set_lookat(lookat)
+
+
+             
+                # view_control = self.vis.get_view_control()
+                # camera_parameters = view_control.convert_to_pinhole_camera_parameters()
+                # camera_front = np.array(camera_parameters.extrinsic[:3, 2])  # z-axis in the extrinsic matrix
+                # rotation_matrix_1 = np.eye(3) - 2 * np.outer(camera_front, camera_front)
+                # rotation_matrix_2 = np.array([
+                #     [1, 0, 0],  # No change in x-axis
+                #     [0, -1, 0], # Flip y-axis
+                #     [0, 0, -1]  # Flip z-axis
+                # ])
+                # extrinsic_matrix = camera_parameters.extrinsic
+                # extrinsic_matrix = np.copy(extrinsic_matrix)
+                # # extrinsic_matrix[:3, :3] =  rotation_matrix_1 @ extrinsic_matrix[:3, :3] 
+                # # extrinsic_matrix[:3, :3] =  extrinsic_matrix[:3, :3] 
+                # extrinsic_matrix[:3, :3] = rotation_matrix_2 @ rotation_matrix_1 @ extrinsic_matrix[:3, :3]  # Apply the rotation to the rotation part
+                # camera_parameters.extrinsic = extrinsic_matrix
+                # view_control.convert_from_pinhole_camera_parameters(camera_parameters)
 
         if(self.registered_ct ==1):
                 view_control_1 = self.vis.get_view_control()
@@ -1308,8 +1478,29 @@ class PointCloudUpdater:
                 points = np.asarray(self.registered_ct_lineset.points)  # Convert point cloud to numpy array
                 centroid = np.mean(points, axis=0) 
 
-                lookat = centroid
+                position_tracker = TW_EM[:3,3]
+                average_point = (centroid+position_tracker)/2
+                lookat = average_point
                 view_control_1.set_lookat(lookat)
+
+
+               
+                # view_control = self.vis.get_view_control()
+                # camera_parameters = view_control.convert_to_pinhole_camera_parameters()
+                # camera_front = np.array(camera_parameters.extrinsic[:3, 2])  # z-axis in the extrinsic matrix
+                # rotation_matrix_1 = np.eye(3) - 2 * np.outer(camera_front, camera_front)
+                # rotation_matrix_2 = np.array([
+                #     [1, 0, 0],  # No change in x-axis
+                #     [0, -1, 0], # Flip y-axis
+                #     [0, 0, -1]  # Flip z-axis
+                # ])
+                # extrinsic_matrix = camera_parameters.extrinsic
+                # extrinsic_matrix = np.copy(extrinsic_matrix)
+                # # extrinsic_matrix[:3, :3] =  rotation_matrix_1 @ extrinsic_matrix[:3, :3] 
+                # # extrinsic_matrix[:3, :3] =  extrinsic_matrix[:3, :3] 
+                # extrinsic_matrix[:3, :3] = rotation_matrix_2 @ rotation_matrix_1 @ extrinsic_matrix[:3, :3]  # Apply the rotation to the rotation part
+                # camera_parameters.extrinsic = extrinsic_matrix
+                # view_control.convert_from_pinhole_camera_parameters(camera_parameters)
 
 
         # ---- APPEND TO ORIFICE CENTER PC ------ #
@@ -1352,15 +1543,22 @@ class PointCloudUpdater:
 
         
         # ------ TRACKER FRAMES ------ #
-        self.tracker_frame.transform(get_transform_inverse(self.previous_transform))
-        self.tracker_frame.transform(TW_EM)
+        # catheter
+        T_catheter = self.get_catheter_transform(TW_EM)
+        self.catheter.transform(get_transform_inverse(self.previous_catheter_transform))
+        self.catheter.transform(T_catheter)
+        self.previous_catheter_transform = T_catheter
+
+        # self.tracker_frame.transform(get_transform_inverse(self.previous_transform))
+        # self.tracker_frame.transform(TW_EM)
         self.previous_transform=TW_EM
         self.us_frame.transform(get_transform_inverse(self.previous_transform_us))
         self.us_frame.transform(TEM_C)
         self.us_frame.transform(TW_EM)
         self.previous_transform_us=TW_EM @ TEM_C
+        self.vis.update_geometry(self.catheter)
         self.vis.update_geometry(self.us_frame)
-        self.vis.update_geometry(self.tracker_frame)
+        # self.vis.update_geometry(self.tracker_frame)
 
         self.vis.poll_events()
         self.vis.update_renderer()
@@ -1379,4 +1577,5 @@ if __name__ == '__main__':
         
     except rospy.ROSInterruptException:
         self.vis.destroy_window()
+        pc_updater.save_pose_data()
         pass

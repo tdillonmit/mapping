@@ -1,0 +1,8 @@
+prefix=/home/tdillon/mapping/install
+
+Name: aortascope
+Description: Description of aortascope
+Version: 0.0.1
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

@@ -1,0 +1,8 @@
+prefix=/home/tdillon/mapping/devel/.private/image_acquisition_ros
+
+Name: image_acquisition_ros
+Description: Description of image_acquisition_ros
+Version: 0.0.1
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

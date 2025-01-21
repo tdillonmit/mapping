@@ -1,0 +1,8 @@
+prefix=/home/tdillon/mapping/install
+
+Name: string_phantom_registration
+Description: Description of string_phantom_registration
+Version: 0.0.1
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

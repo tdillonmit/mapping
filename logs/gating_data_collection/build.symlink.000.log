@@ -1,0 +1,11 @@
+Symlinking /home/tdillon/mapping/devel/lib/gating_data_collection/mapping_real_time.py
+Symlinking /home/tdillon/mapping/devel/lib/gating_data_collection/mapping.py
+Symlinking /home/tdillon/mapping/devel/lib/gating_data_collection/rgb_image_visualizer.py
+Symlinking /home/tdillon/mapping/devel/lib/gating_data_collection/mapping_parameters_gui.py
+Symlinking /home/tdillon/mapping/devel/lib/gating_data_collection/binary_image_visualizer.py
+Symlinking /home/tdillon/mapping/devel/lib/gating_data_collection/cmake.lock
+Symlinking /home/tdillon/mapping/devel/lib/gating_data_collection/gating_signal_visualizer_white_pump.py
+Symlinking /home/tdillon/mapping/devel/lib/gating_data_collection/gating_signal_visualizer.py
+Symlinking /home/tdillon/mapping/devel/lib/pkgconfig/gating_data_collection.pc
+Symlinking /home/tdillon/mapping/devel/share/gating_data_collection/cmake/gating_data_collectionConfig-version.cmake
+Symlinking /home/tdillon/mapping/devel/share/gating_data_collection/cmake/gating_data_collectionConfig.cmake
