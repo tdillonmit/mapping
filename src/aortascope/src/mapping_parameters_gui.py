@@ -59,6 +59,7 @@ def call_funsr():
     root.percent.config(text = "Initializing surface ..")
     root.update_idletasks()
     run_normalizedSpace.run_funsr(dataset, root)
+    root.percent.config(text = "Surface Initialized!")
     # script_dir = os.path.dirname(os.path.abspath(__file__))
     # os.chdir(script_dir)
 
@@ -92,7 +93,10 @@ def call_register():
     root.update_idletasks()
     call_registration_indirectly(dataset, visualize)
     root.percent.config(text = "Registration Complete")
+    rospy.set_param('registration_done', 1)
     root.update_idletasks()
+ 
+    
     
     
 
@@ -148,6 +152,7 @@ def quit_aortascope():
     root.quit()
     root.destroy()
     rospy.set_param('shutdown', 1)
+    time.sleep(0.3)
     rospy.signal_shutdown('User quitted')
     
  

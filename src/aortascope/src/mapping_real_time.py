@@ -130,14 +130,18 @@ class PointCloudUpdater:
 
         # ----- INITIALIZE TRACKER FRAMES ------ #
         self.frame_scaling=0.025
-        # self.tracker_frame=o3d.geometry.TriangleMesh.create_coordinate_frame()
-        # self.tracker_frame.scale(self.frame_scaling,center=[0,0,0])
+        self.tracker_frame=o3d.geometry.TriangleMesh.create_coordinate_frame()
+        self.tracker_frame.scale(self.frame_scaling,center=[0,0,0])
 
         self.baseframe=o3d.geometry.TriangleMesh.create_coordinate_frame()
         self.baseframe.scale(self.frame_scaling,center=[0,0,0])
 
         self.us_frame=o3d.geometry.TriangleMesh.create_coordinate_frame()
         self.us_frame.scale(self.frame_scaling,center=[0,0,0])
+
+        self.tracker = o3d.geometry.TriangleMesh.create_cylinder(radius=0.0015, height=0.01, resolution=40)
+        self.tracker.compute_vertex_normals()
+        self.tracker.paint_uniform_color([1,0.5,0])
 
         self.catheter = o3d.geometry.TriangleMesh.create_cylinder(radius=0.0015, height=0.01)
         self.catheter.compute_vertex_normals()
@@ -147,10 +151,12 @@ class PointCloudUpdater:
         self.previous_transform_1=np.eye(4)
         self.previous_transform_us=np.eye(4)
         self.previous_catheter_transform=np.eye(4)
+        self.previous_tracker_transform=np.eye(4)
 
         self.vis.add_geometry(self.catheter)
+        self.vis.add_geometry(self.tracker)
         self.vis.add_geometry(self.us_frame)
-        # self.vis.add_geometry(self.tracker_frame)
+        self.vis.add_geometry(self.tracker_frame)
         self.vis.add_geometry(self.baseframe)
 
     
@@ -627,9 +633,10 @@ class PointCloudUpdater:
        
 
     
-        print("started saving")
+        print("started saving pose data")
         # Iterate through the image and TW_EM batches simultaneously
-        for i, (grayscale_image, TW_EM) in enumerate(zip(self.image_batch, self.tw_em_batch)):
+        i=0
+        for TW_EM in self.pose_batch:
        
         
 
@@ -637,6 +644,8 @@ class PointCloudUpdater:
             tw_em_filename = f'{self.write_folder}/pose_data/TW_EM_{self.image_call + i}.npy'
             with open(tw_em_filename, 'wb') as f:
                 np.save(f, TW_EM)
+
+            i=i+1
 
 
 
@@ -662,8 +671,8 @@ class PointCloudUpdater:
         # self.vis.add_geometry(ivus_funsr_lineset)
         # self.vis2.add_geometry(ivus_funsr_mesh)
 
-        self.deeplumen_on = 1
-        self.initialize_deeplumen_model()
+        self.deeplumen_on = 0
+        # self.initialize_deeplumen_model()
 
 
         
@@ -694,7 +703,7 @@ class PointCloudUpdater:
 
         
         
-        
+        self.vis.remove_geometry(self.us_frame)
         
         
 
@@ -716,7 +725,7 @@ class PointCloudUpdater:
 
         self.load_parameters(config_yaml)
 
-        self.record_poses = 1
+        self.record_poses = 1 #read in later
         if(self.record_poses):
             self.pose_batch=[]
 
@@ -735,13 +744,13 @@ class PointCloudUpdater:
 
             # NOte that ivus centroids have been used here!!!
             self.ct_centroids = np.load(self.write_folder + '/ivus_centroids.npy')
-            self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.004, 10, [0,1,0])
+            self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.00225, 20, [0,1,0])
             self.centerline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc.ply')
 
-            # SMOOTHING MESH AS IMPORTED!!
-            # self.registered_ct_mesh = self.registered_ct_mesh.filter_smooth_taubin(number_of_iterations=100)
+            # # SMOOTHING MESH AS IMPORTED!! - not anymore
+            # self.registered_ct_mesh = self.registered_ct_mesh.filter_smooth_taubin(number_of_iterations=10)
             # self.registered_ct_lineset = create_wireframe_lineset_from_mesh(self.registered_ct_mesh)
-            #END
+            # #END
 
             self.registered_ct_lineset.paint_uniform_color([0,0,0])
 
@@ -750,9 +759,11 @@ class PointCloudUpdater:
 
             self.vis2.add_geometry(self.ct_spheres)
             self.vis2.add_geometry(self.registered_ct_mesh_2)
+            self.vis2.add_geometry(self.tracker)
+
+            self.vis.remove_geometry(self.catheter)
 
             self.vis.add_geometry(self.registered_ct_lineset)
-
             self.vis.add_geometry(self.ct_spheres)
             
             
@@ -765,11 +776,19 @@ class PointCloudUpdater:
             # test_pc= o3d.geometry.PointCloud() 
             # test_pc.points = o3d.utility.Vector3dVector(np.asarray(self.registered_ct_mesh.vertices)[self.constraint_indices,:])
 
+        self.scene = o3d.t.geometry.RaycastingScene()
+        self.registered_ct_mesh = o3d.t.geometry.TriangleMesh.from_legacy(self.registered_ct_mesh)
+        _ = self.scene.add_triangles(self.registered_ct_mesh)  # we do not need the geometry ID for mesh
+
+    
+
 
     def switch_probe_view(self):
         print("switched_frames")
         # just switch the transform you fetch
         if(self.dest_frame == 'target1'):
+
+
             self.dest_frame = 'target2'
             self.deeplumen_on = 0
             self.live_deformation = 0
@@ -779,28 +798,41 @@ class PointCloudUpdater:
 
     def get_catheter_transform(self,TW_EM):
 
-        T_shift = np.eye(4)
-        T_shift[:3,3] = np.asarray([0.002,0.0012,0.01])
+        # T_shift = np.eye(4)
+        # T_shift[:3,3] = np.asarray([0.002,0.0012,0.01])
 
     
-        direction = TW_EM[:3, 0]
-        cylinder_z_axis = np.array([0, 0, 1])
-        rotation_axis = np.cross(cylinder_z_axis, direction)
-        rotation_angle = np.arccos(np.dot(cylinder_z_axis, direction))
-        rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
-        rotation_matrix = o3d.geometry.get_rotation_matrix_from_axis_angle(rotation_axis * rotation_angle)
+        # direction = TW_EM[:3, 0]
+        # cylinder_z_axis = np.array([0, 0, 1])
+        # rotation_axis = np.cross(cylinder_z_axis, direction)
+        # rotation_angle = np.arccos(np.dot(cylinder_z_axis, direction))
+        # rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
+        # rotation_matrix = o3d.geometry.get_rotation_matrix_from_axis_angle(rotation_axis * rotation_angle)
+
+        roll_axis = TW_EM[:3, 0]  # This will be aligned with the cylinder's roll axis
+        short_axis_1 = TW_EM[:3, 1]  # This will be aligned with the first short axis of the cylinder
+        short_axis_2 = TW_EM[:3, 2]  # This will be aligned with the second short axis of the cylinder
+
+        # Normalize the axes to ensure they are unit vectors
+        roll_axis = roll_axis / np.linalg.norm(roll_axis)
+        short_axis_1 = short_axis_1 / np.linalg.norm(short_axis_1)
+        short_axis_2 = short_axis_2 / np.linalg.norm(short_axis_2)
+
+        # Construct the rotation matrix using the normalized basis vectors
+        rotation_matrix = np.column_stack((short_axis_2, short_axis_1, roll_axis))
 
         T_transformation = np.eye(4)
         T_transformation[:3,:3]= rotation_matrix
         T_transformation[:3,3] = TW_EM[:3,3]
         
-        T_catheter = T_transformation @ T_shift
+        T_catheter = T_transformation
 
         return T_catheter
     
 
     def close_app(self):
         cv2.destroyAllWindows()
+        self.save_pose_data()
         rospy.signal_shutdown('User quitted')
 
     
@@ -1325,7 +1357,7 @@ class PointCloudUpdater:
 
                 near_vpC_points.transform(TW_EM @ TEM_C)
 
-                if(self.live_deformation == 1 and self.registered_ct == 1):
+                if(self.live_deformation == 1 and self.registered_ct == 1 and self.dest_frame == 'target1'):
                      
                     #  coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.01, origin=[0, 0, 0])
                     #  coordinate_frame.transform(TW_EM @ TEM_C)
@@ -1343,6 +1375,30 @@ class PointCloudUpdater:
                         self.vis2.update_geometry(self.registered_ct_mesh_2)
                      except:
                         pass
+
+                if(self.live_deformation == 1 and self.registered_ct == 1 and self.dest_frame == 'target2'):
+                     
+                   
+                    # check if EM transform is outside the mesh before deformation calculations
+                    query_points = np.asarray([TW_EM[:3,3]])
+                    query_points_tensor = o3d.core.Tensor(query_points, dtype=o3d.core.Dtype.Float32)
+                    signed_distance = scene.compute_signed_distance(query_points_tensor)
+                    signed_distance_np = signed_distance.numpy()  # Convert to NumPy array
+
+                    if(signed_distance_np[0] > 0):
+                        try:
+                            deformed_mesh = live_deform(self.registered_ct_mesh, self.constraint_indices, self.centerline_pc, TW_EM @ TEM_C, near_vpC_points, self.dest_frame )
+                            temp_lineset = create_wireframe_lineset_from_mesh(deformed_mesh)
+                            self.registered_ct_lineset.points = temp_lineset.points
+                            self.registered_ct_lineset.lines = temp_lineset.lines
+                            self.vis.update_geometry(self.registered_ct_lineset)
+
+                            self.registered_ct_mesh_2.vertices = deformed_mesh.vertices
+                            self.registered_ct_mesh_2.compute_vertex_normals()
+                            self.vis2.update_geometry(self.registered_ct_mesh_2)
+                        except:
+                            pass
+
 
                 if(self.extend == 1 ):
                     self.volumetric_near_point_cloud.points.extend(near_vpC_points.points)
@@ -1413,17 +1469,24 @@ class PointCloudUpdater:
 
             # intrinsic = camera_parameters.intrinsic
 
-            T = TW_EM @ TEM_C
+            # T = TW_EM @ TEM_C
+
+            T = TW_EM 
 
             up = T[:3, 2]          # Z-axis (3rd column)
             front = -T[:3, 0]      # Negative X-axis (1st column) - look forward or back
+
             lookat = T[:3, 3]      # Translation vector (camera position)
+            translation = np.asarray([-0.002,0,0.004])
+            lookat = (TW_EM[:3,:3] @ translation) + lookat
+            
 
             # print("is this changing??", T)
 
-            # view_control.set_up(up) # lock rotation
+ 
             view_control.set_front(front)
             view_control.set_lookat(lookat)
+            view_control.set_up(up)
 
             view_control.set_zoom(0.01)
             # view_control.set_zoom(0.05)
@@ -1434,8 +1497,8 @@ class PointCloudUpdater:
             # Synchronize the pinhole parameters with the current window size
             # view_control.convert_from_pinhole_camera_parameters(camera_parameters)
 
-            self.vis2.poll_events()
-            self.vis2.update_renderer()
+            # self.vis2.poll_events()
+            # self.vis2.update_renderer()
 
         # ----- FOLLOW THE PROBE ------- #
         # make this a check box
@@ -1544,21 +1607,48 @@ class PointCloudUpdater:
         
         # ------ TRACKER FRAMES ------ #
         # catheter
-        T_catheter = self.get_catheter_transform(TW_EM)
+        T_catheter = self.get_catheter_transform(TW_EM @ TEM_C)
         self.catheter.transform(get_transform_inverse(self.previous_catheter_transform))
         self.catheter.transform(T_catheter)
         self.previous_catheter_transform = T_catheter
 
-        # self.tracker_frame.transform(get_transform_inverse(self.previous_transform))
-        # self.tracker_frame.transform(TW_EM)
-        self.previous_transform=TW_EM
-        self.us_frame.transform(get_transform_inverse(self.previous_transform_us))
-        self.us_frame.transform(TEM_C)
-        self.us_frame.transform(TW_EM)
-        self.previous_transform_us=TW_EM @ TEM_C
-        self.vis.update_geometry(self.catheter)
-        self.vis.update_geometry(self.us_frame)
-        # self.vis.update_geometry(self.tracker_frame)
+        
+
+        # tracker
+        T_tracker = self.get_catheter_transform(TW_EM)
+        self.tracker.transform(get_transform_inverse(self.previous_tracker_transform))
+        self.tracker.transform(T_tracker)
+        self.previous_tracker_transform = T_tracker
+        self.vis.update_geometry(self.tracker)
+
+
+        if(self.registered_ct ==1):
+            self.tracker_frame.transform(get_transform_inverse(self.previous_transform))
+            self.tracker_frame.transform(TW_EM)
+            self.previous_transform=TW_EM
+            self.vis.update_geometry(self.tracker_frame)
+        
+        
+
+        if(self.registered_ct!=1):
+            
+            
+            self.previous_transform_us=TW_EM @ TEM_C
+            self.us_frame.transform(get_transform_inverse(self.previous_transform_us))
+            self.us_frame.transform(TEM_C)
+            self.us_frame.transform(TW_EM)
+            self.vis.update_geometry(self.us_frame)
+            self.vis.update_geometry(self.catheter)
+
+    
+
+        if(self.registered_ct ==1):
+            self.vis2.update_geometry(self.tracker)
+            self.vis2.poll_events()
+            self.vis2.update_renderer()
+        
+        
+        
 
         self.vis.poll_events()
         self.vis.update_renderer()
@@ -1577,5 +1667,4 @@ if __name__ == '__main__':
         
     except rospy.ROSInterruptException:
         self.vis.destroy_window()
-        pc_updater.save_pose_data()
         pass

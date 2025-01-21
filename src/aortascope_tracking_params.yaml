@@ -19,7 +19,7 @@ model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_traine
 # model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/combined_dataset/weights.h5
 
 # mapping visualization parameters
-vpC_map: 1
+vpC_map: 0
 bpC_map: 0
 extend: 0
 tsdf_map: 0
@@ -29,7 +29,7 @@ orifice_center_map: 0
 # non rigid icp registered ct scan for tracking
 registered_ct : 1
 registered_ct_dataset: user_has_not_defined
-live_deformation: 1
+live_deformation: 0
 
 
 
