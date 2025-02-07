@@ -7,7 +7,9 @@
 
 # IMAGE_PATH='/home/tdillon/Documents/mapping_data/pvac_dissection_1'
 
-IMAGE_PATH='/home/tdillon/mapping_data/tortuous_dissection_false_lumen_pulsatile_105bpm'
+# IMAGE_PATH='/home/tdillon/mapping_data/tortuous_dissection_false_lumen_pulsatile_105bpm'
+
+IMAGE_PATH='/home/tdillon/Documents/datasets/pig_1'
 
 # IMAGE_PATH='/media/tdillon/4D71-BDA7/mapping_data/pvac_dissection_0'
 # IMAGE_PATH='/media/tdillon/4D71-BDA7/mapping_data/inkbit_pullback'

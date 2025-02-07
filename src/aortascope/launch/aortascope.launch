@@ -14,9 +14,9 @@
   <node name="gating_visualizer_white_pump" pkg="aortascope" type="gating_signal_visualizer_white_pump.py" output="screen" />
   
   <!-- Launch rosserial node for Arduino communication -->
-  <!-- <node name="rosserial_node" pkg="rosserial_python" type="serial_node.py" output="screen"> -->
-    <!-- <param name="port" value="/dev/ttyACM0"/>    -->
-  <!-- </node> -->
+  <node name="rosserial_node" pkg="rosserial_python" type="serial_node.py" output="screen"> 
+    <param name="port" value="/dev/ttyACM0"/>   
+  </node>
 
 
 </launch>

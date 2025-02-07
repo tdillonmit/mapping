@@ -39,6 +39,7 @@ class PointCloudUpdater:
     def __init__(self):
         
         # load the yaml file - specific to post processing
+        # with open('/home/tdillon/mapping/src/mapping_parameters_real_time.yaml', 'r') as file:
         with open('/home/tdillon/mapping/src/mapping_parameters_real_time.yaml', 'r') as file:
             config_yaml = yaml.safe_load(file)
 

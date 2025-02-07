@@ -7,7 +7,7 @@ savepath : user_has_not_defined
 gating : 0
 
 # record or just visualize data?
-record : 0
+record : 1
 record_poses: 1
 
 # healthy first return manual segmentation
@@ -24,6 +24,8 @@ bpC_map: 0
 extend: 0
 tsdf_map: 0
 orifice_center_map: 0
+
+dissection_track: 0
 
 
 # non rigid icp registered ct scan for tracking

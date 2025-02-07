@@ -41,7 +41,7 @@ class GatingVisualizer:
         # Draw a white line for 1 and a black line for 0 based on the latest signal value
         # delta = self.latest_signal_value - self.previous_value
         # self.previous_value = self.latest_signal_value
-        threshold = 500
+        threshold = 620
         # if(self.latest_signal_value < threshold):
         #     print(self.latest_signal_value)
         color = (255, 255, 255) if self.latest_signal_value < threshold else (0, 0, 0)
@@ -52,7 +52,7 @@ class GatingVisualizer:
         # Update the last column with the new signal value
         self.signal_image[:, -1] = color
 
-        resized_image = cv2.resize(self.signal_image, (self.signal_length * 10, self.signal_height * 3))
+        resized_image = cv2.resize(self.signal_image, (self.signal_length * 10, self.signal_height * 4))
 
 
         # Update the graph

@@ -48,7 +48,8 @@ class PointCloudUpdater:
 
         
         # INITIALIZE IN MAPPING CONFIGURATION
-        with open('/home/tdillon/mapping/src/aortascope_mapping_params.yaml', 'r') as file:
+        # with open('/home/tdillon/mapping/src/aortascope_mapping_params.yaml', 'r') as file:
+        with open('/home/tdillon/mapping/src/aortascope_mapping_params_dissection.yaml', 'r') as file:
             config_yaml = yaml.safe_load(file)
 
         self.load_parameters(config_yaml)
@@ -80,7 +81,7 @@ class PointCloudUpdater:
         # ---- GUI SPECIFIC ------ #
         # ---- INITIALIZE VISUALIZERS ----- #
 
-        self.double_display = 1
+        self.double_display = 0
         self.width_scaling = 0.5
         self.height_scaling = (1/2.2222)
 
@@ -377,6 +378,9 @@ class PointCloudUpdater:
 
         self.bpC_map = config_yaml['bpC_map']
 
+        self.dissection_track = config_yaml['dissection_track']
+        self.dissection_map = config_yaml['dissection_map']
+
         # dont load extend
         # self.extend = config_yaml['extend']
 
@@ -437,7 +441,7 @@ class PointCloudUpdater:
 
     def start_recording(self):
 
-        self.deeplumen_on = 1
+        # self.deeplumen_on = 1
 
         # turn on extend
         self.record=1
@@ -620,7 +624,7 @@ class PointCloudUpdater:
 
         
 
-        save_frequency = 1 #doesnt work with ecg etc
+        save_frequency = 10 #doesnt work with ecg etc
 
         # dataset saving
         # if(self.record==1):
@@ -704,6 +708,8 @@ class PointCloudUpdater:
         
         
         self.vis.remove_geometry(self.us_frame)
+        self.vis.remove_geometry(self.volumetric_near_point_cloud)
+        self.vis.remove_geometry(self.volumetric_far_point_cloud)
         
         
 
@@ -715,19 +721,19 @@ class PointCloudUpdater:
 
         # try healthy lumen tracking for live deformation!!
         
-        # self.initialize_deeplumen_model()
-
-
-        
         # load the yaml file - specific to post processing
-        with open('/home/tdillon/mapping/src/aortascope_tracking_params.yaml', 'r') as file:
+
+        # design checkbox for this
+        # with open('/home/tdillon/mapping/src/aortascope_tracking_params.yaml', 'r') as file:
+        with open('/home/tdillon/mapping/src/aortascope_tracking_params_dissection.yaml', 'r') as file:
             config_yaml = yaml.safe_load(file)
 
         self.load_parameters(config_yaml)
 
-        self.record_poses = 1 #read in later
-        if(self.record_poses):
+        self.record_poses = 1
+        if(self.record_poses == 1):
             self.pose_batch=[]
+            # self.record_poses = 1 #read in later
 
         # GUI SPECIFIC
 
@@ -769,6 +775,10 @@ class PointCloudUpdater:
             
             print("registered the ct from non rigid icp!!")
 
+            self.scene = o3d.t.geometry.RaycastingScene()
+            self.registered_ct_mesh = o3d.t.geometry.TriangleMesh.from_legacy(self.registered_ct_mesh)
+            _ = self.scene.add_triangles(self.registered_ct_mesh)  # we do not need the geometry ID for mesh
+
         if(self.live_deformation == 1):
             self.constraint_radius=self.default_values['/constraint_radius'] 
             self.constraint_locations = np.vstack((self.constraint_locations,np.asarray(self.centerline_pc.points)[0,:],np.asarray(self.centerline_pc.points)[-1,:]))
@@ -776,9 +786,37 @@ class PointCloudUpdater:
             # test_pc= o3d.geometry.PointCloud() 
             # test_pc.points = o3d.utility.Vector3dVector(np.asarray(self.registered_ct_mesh.vertices)[self.constraint_indices,:])
 
-        self.scene = o3d.t.geometry.RaycastingScene()
-        self.registered_ct_mesh = o3d.t.geometry.TriangleMesh.from_legacy(self.registered_ct_mesh)
-        _ = self.scene.add_triangles(self.registered_ct_mesh)  # we do not need the geometry ID for mesh
+
+        if(self.dissection_track == 1):
+
+            self.dissection_lumen_1 = o3d.io.read_triangle_mesh(self.write_folder + '/near_lumen_mesh.ply')
+            self.dissection_lumen_2 = o3d.io.read_triangle_mesh(self.write_folder + '/far_lumen_mesh.ply')
+
+            self.dissection_lumen_1.compute_vertex_normals()
+            self.dissection_lumen_2.compute_vertex_normals()
+
+            self.dissection_lumen_1.paint_uniform_color([1,0,0])
+            self.dissection_lumen_2.paint_uniform_color([0,0,1])
+
+            self.vis.add_geometry(self.dissection_lumen_1)
+            self.vis.add_geometry(self.dissection_lumen_2)
+
+            self.vis2.add_geometry(self.dissection_lumen_1)
+            self.vis2.add_geometry(self.dissection_lumen_2)
+
+            
+
+            self.vis2.add_geometry(self.tracker)
+
+
+            self.deeplumen_on = 1
+            self.initialize_deeplumen_model()
+
+            
+
+
+
+        
 
     
 
@@ -915,6 +953,8 @@ class PointCloudUpdater:
         if(self.tsdf_map != 1 and self.vpC_map != 1 and self.bpC_map!=1):
             pass
 
+        
+
         # fetch rospy parameters for real time mapping (could be placed in initialization)
         threshold = self.threshold
         no_points = self.no_points
@@ -931,6 +971,8 @@ class PointCloudUpdater:
         if(start_record ==1):
             self.start_recording()
             rospy.set_param('start_record', 0)
+
+        
 
         save_dataset = rospy.get_param('save_data', 0 )
         if(save_dataset ==1):
@@ -965,10 +1007,14 @@ class PointCloudUpdater:
         shutdown = rospy.get_param('shutdown', 0 )
         if(shutdown ==1):
             self.close_app()
+
+        # stop
         
 
         # interact with hardware over rospy
         pullback = rospy.get_param('pullback', 0)
+
+        
         
         self.pullback_pub.publish(pullback)
 
@@ -980,7 +1026,7 @@ class PointCloudUpdater:
         # ------ FIRST RETURN SEGMENTATION -------- #
 
         # first return segmentation
-        if(self.deeplumen_on == 0 ):
+        if(self.deeplumen_on == 0 and self.dest_frame == 'target1'):
 
             relevant_pixels=first_return_segmentation(grayscale_image,threshold, crop_index,self.gridlines)
             relevant_pixels=np.asarray(relevant_pixels).squeeze()
@@ -992,7 +1038,7 @@ class PointCloudUpdater:
                                             (int(ellipse_model[1][0]/2), int(ellipse_model[1][1]/2)),
                                             int(ellipse_model[2]), 0, 360, 5)
 
-            
+            # insert IVUSProcSegmentation instead
             
             
 
@@ -1065,6 +1111,39 @@ class PointCloudUpdater:
 
             mask_1, mask_2 = deeplumen_segmentation(image,self.model)
 
+            # ensures the near lumen is always the one wit the probe in it
+
+            if(mask_2[112,112] == 255):
+                
+                placeholder_mask = copy.deepcopy(mask_1)
+                mask_1 = copy.deepcopy(mask_2)
+                mask_2 = placeholder_mask
+
+            elif(mask_1[112,112] !=255 and mask_2[112,112] != 255):
+                
+                ret, mask = cv2.threshold(grayscale_image, threshold, 255, cv2.THRESH_BINARY)
+                num_labels, labels = cv2.connectedComponents(mask)
+                component_label = labels[112,112]
+
+                component_mask = np.zeros_like(mask)
+                component_mask[labels == component_label] = 255
+
+                overlap_mask = cv2.bitwise_and(component_mask, mask_1)
+                overlapping_pixels_1 = cv2.countNonZero(overlap_mask)
+
+                overlap_mask = cv2.bitwise_and(component_mask, mask_2)
+                overlapping_pixels_2 = cv2.countNonZero(overlap_mask)
+
+                if(overlapping_pixels_1 > overlapping_pixels_2):
+                    mask_1 = cv2.bitwise_or(component_mask + mask_1)
+
+                if(overlapping_pixels_2 > overlapping_pixels_1): 
+
+                    placeholder_mask = copy.deepcopy(mask_1)
+                    mask_1 = copy.deepcopy(mask_2)
+                    mask_2 = placeholder_mask
+
+                    mask_1 = cv2.bitwise_or(component_mask + mask_1)
             
 
             
@@ -1263,24 +1342,29 @@ class PointCloudUpdater:
         # this is early in the function so that the pose and masks get adjusted if they needs to be
 
         # ---- ADD TO BUFFERS ----- #
-        self.mask_1_buffer.append(mask_1)
-        self.mask_2_buffer.append(mask_2)
+        if(self.dest_frame == 'target2'):
+            mask_1 = np.zeros_like(grayscale_image)
+            mask_2 = np.zeros_like(grayscale_image)
 
-        # ---- 2D CENTROID CALCULATIONS ----- #
+
+        if(self.dest_frame == 'target1'):
+            self.mask_1_buffer.append(mask_1)
+            self.mask_2_buffer.append(mask_2)
+
+            # ---- 2D CENTROID CALCULATIONS ----- #
+            
+
+            moments = cv2.moments(mask_1)
+            centroid = (int(moments['m10'] / moments['m00']), int(moments['m01'] / moments['m00']))
+            centre_x = 224.0/2.0
+            centre_y = 224.0/2.0
+            centred_centroid=np.array(centroid)-[centre_x,centre_y]
+            # centred_centroid=np.array(centroid)
+            two_d_centroid=centred_centroid*scaling
+
         
-        moments = cv2.moments(mask_1)
-        
 
-        centroid = (int(moments['m10'] / moments['m00']), int(moments['m01'] / moments['m00']))
-        centre_x = 224.0/2.0
-        centre_y = 224.0/2.0
-        centred_centroid=np.array(centroid)-[centre_x,centre_y]
-        # centred_centroid=np.array(centroid)
-        two_d_centroid=centred_centroid*scaling
-
-        
-
-        if(self.extend==1):
+        if(self.extend==1 and self.dissection_map != 1):
 
                 extrinsic_matrix = TW_EM @ TEM_C
                 
@@ -1456,12 +1540,12 @@ class PointCloudUpdater:
                 self.boundary_near_point_cloud.paint_uniform_color([1,0,0])
 
  
-
+        
         
                 
 
         # ----- SIMULATE PROBE VIEW ------- #
-        if(self.registered_ct ==  1):
+        if(self.registered_ct ==  1 or self.dissection_track == 1):
             view_control = self.vis2.get_view_control()
 
             # Set the camera view aligned with the x-axis

@@ -5,7 +5,7 @@ savepath : user_has_not_defined
 
 
 # is there an ECG signal?
-gating : 0
+gating : 1
 
 # record or just visualize data?
 record : 0
@@ -15,8 +15,8 @@ tsdf_map : 0
 
 # ML segmentation
 deeplumen_on : 0
-model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/full_inkbit_aorta_2/weights.weights.h5
-# model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/combined_dataset/weights.h5
+# model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/full_inkbit_aorta_2/weights.weights.h5
+model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/combined_dataset/weights.h5
 
 # mapping visualization parameters
 vpC_map: 1
@@ -24,6 +24,9 @@ bpC_map: 0
 extend: 0
 tsdf_map: 0
 orifice_center_map: 0
+
+dissection_map: 0
+dissection_track: 0
 
 
 # non rigid icp registered ct scan for tracking

@@ -1,4 +1,3 @@
-
 ---
 
 savepath : user_has_not_defined
@@ -9,28 +8,31 @@ gating : 0
 
 # record or just visualize data?
 record : 0
+record_poses: 0
 
 # healthy first return manual segmentation
 tsdf_map : 0
 
 # ML segmentation
-deeplumen_on : 0
-model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/full_inkbit_aorta_2/weights.weights.h5
-# model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/combined_dataset/weights.h5
+deeplumen_on : 1
+# model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/full_inkbit_aorta_2/weights.weights.h5
+model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/combined_dataset/weights.h5
 
 # mapping visualization parameters
-vpC_map: 1
+vpC_map: 0
 bpC_map: 0
 extend: 0
 tsdf_map: 0
 orifice_center_map: 0
+
+dissection_map: 0
+dissection_track: 1
 
 
 # non rigid icp registered ct scan for tracking
 registered_ct : 0
 registered_ct_dataset: user_has_not_defined
 live_deformation: 0
-
 
 
 

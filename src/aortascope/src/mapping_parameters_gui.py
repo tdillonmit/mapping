@@ -128,15 +128,29 @@ def start_pullback():
     """
     Set the pullback state to 1 (start).
     """
-    pullback.set(1)
-    update_parameters()
+    
+    # pullback.set(1)
+    rospy.set_param("pullback", 1)
+    # update_parameters()
+
+    pullback_check = rospy.get_param("pullback", 0)
+    
+    
+    print("pullback STARTED")
+    print("pullback check", pullback_check)
 
 def stop_pullback():
     """
     Set the pullback state to 0 (stop).
     """
-    pullback.set(0)
-    update_parameters()
+    # pullback.set(0)
+    # update_parameters()
+    # print("pullback is", pullback)
+    rospy.set_param("pullback", 0)
+
+    pullback_check = rospy.get_param("pullback", 0)
+    print("pullback STOPPED")
+    print("pullback check", pullback_check)
 
 # def update_progress(progress_bar, percent, value, root):
 #         value = rospy.get_param('funsr_percent', 0)
@@ -166,10 +180,10 @@ try:
     root.title("AortaScope")
 
     # single display
-    # root.geometry("860x1320+10+10") 
+    root.geometry("860x1320+10+10") 
 
     # double display
-    root.geometry("410x527+0+0") 
+    # root.geometry("410x527+0+0") 
  
 
     # pullback start / stop
@@ -203,10 +217,10 @@ try:
     record_button = Button(root, text="Start Recording", font=button_font, width=button_width, height=button_height, command=start_record)
     record_button.grid(row=2, column=0, padx=padding_x, pady=padding_y)
 
-    start_button = Button(root, text="Start Pullback Device", font=button_font, width=button_width, height=button_height, command=start_record)
+    start_button = Button(root, text="Start Pullback Device", font=button_font, width=button_width, height=button_height, command=start_pullback)
     start_button.grid(row=3, column=0, padx=padding_x, pady=padding_y)
 
-    stop_button = Button(root, text="Stop Pullback Device", font=button_font, width=button_width, height=button_height, command=start_record)
+    stop_button = Button(root, text="Stop Pullback Device", font=button_font, width=button_width, height=button_height, command=stop_pullback)
     stop_button.grid(row=4, column=0, padx=padding_x, pady=padding_y)
 
     save_data_button = Button(root, text="Finish Recording", font=button_font, width=button_width, height=button_height, command=save_data)
