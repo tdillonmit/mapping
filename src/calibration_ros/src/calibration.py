@@ -192,9 +192,14 @@ def get_transform_inverse(transform):
     return T_inv
 
 def transform_stamped_to_matrix(transform_stamped):
+
+    # print("transform_stamped", transform_stamped.transform)
+
     translation = np.array([transform_stamped.transform.translation.x,
                             transform_stamped.transform.translation.y,
                             transform_stamped.transform.translation.z])
+
+    # print("transform_stamped rotation", transform_stamped.transform.rotation)
 
     #make sure you check the convention on x,y,z,w components and order - scalar vs vector part
     quaternion = np.array([transform_stamped.transform.rotation.x,
@@ -737,39 +742,44 @@ class PointCloudUpdater:
 
         sphere_radius=0.0025
         sphere_resolution=5
-        no_sphere_vertices=np.shape(np.asarray(o3d.geometry.TriangleMesh.create_sphere(radius=sphere_radius,resolution=sphere_resolution).vertices))[0]
+        # no_sphere_vertices=np.shape(np.asarray(o3d.geometry.TriangleMesh.create_sphere(radius=sphere_radius,resolution=sphere_resolution).vertices))[0]
 
-        for image_point in scan_points.points:
+        # for image_point in scan_points.points:
             
-            # reduce resolution of balls again...
+        #     # reduce resolution of balls again...
             
-            self.sphere=o3d.geometry.TriangleMesh.create_sphere(radius=sphere_radius,resolution=sphere_resolution)
+        #     self.sphere=o3d.geometry.TriangleMesh.create_sphere(radius=sphere_radius,resolution=sphere_resolution)
 
-            self.sphere.translate(image_point) 
+        #     self.sphere.translate(image_point) 
 
-            if(first_run==0):
+        #     if(first_run==0):
             
-                total_vertices=total_vertices+no_sphere_vertices
-                triangles_offset_np = np.asarray(self.sphere.triangles) + total_vertices
+        #         total_vertices=total_vertices+no_sphere_vertices
+        #         triangles_offset_np = np.asarray(self.sphere.triangles) + total_vertices
  
-                vertices_list.append(np.asarray(self.sphere.vertices))
-                triangles_list.append(triangles_offset_np)
+        #         vertices_list.append(np.asarray(self.sphere.vertices))
+        #         triangles_list.append(triangles_offset_np)
 
          
             
-            else:
+        #     else:
           
-                total_vertices=no_sphere_vertices
-                vertices_list.append(np.asarray(self.sphere.vertices))
-                triangles_list.append(np.asarray(self.sphere.triangles))
-                first_run=0
+        #         total_vertices=no_sphere_vertices
+        #         vertices_list.append(np.asarray(self.sphere.vertices))
+        #         triangles_list.append(np.asarray(self.sphere.triangles))
+        #         first_run=0
             
             
-        vertices_list=np.vstack(vertices_list)
-        triangles_list=np.vstack(triangles_list)
+        # vertices_list=np.vstack(vertices_list)
+        # triangles_list=np.vstack(triangles_list)
 
-        self.spheres.vertices.extend(o3d.utility.Vector3dVector(vertices_list))
-        self.spheres.triangles.extend(o3d.utility.Vector3iVector(triangles_list))
+        # self.spheres.vertices.extend(o3d.utility.Vector3dVector(vertices_list))
+        # self.spheres.triangles.extend(o3d.utility.Vector3iVector(triangles_list))
+
+        centroid_sphere = get_sphere_cloud(np.asarray(scan_points.points), 0.0025, 5)
+
+        self.spheres.vertices = centroid_sphere.vertices
+        self.spheres.triangles = centroid_sphere.triangles
 
 
 
@@ -801,7 +811,37 @@ class PointCloudUpdater:
             # self.vis.poll_events()
             # self.vis.update_renderer()
 
-            
+def get_sphere_cloud(points,radius,resolution, color=[0,1,0]):
+
+    spheres = o3d.geometry.TriangleMesh()
+    spheres.vertices = o3d.utility.Vector3dVector([])
+    spheres.triangles = o3d.utility.Vector3iVector([])
+
+    for image_point in points:
+
+        
+        
+        # Create a new sphere for each point
+        sphere = o3d.geometry.TriangleMesh.create_sphere(radius=radius, resolution=resolution)
+        translated=sphere.translate(image_point)
+
+        num_target_vertices = len(spheres.vertices)
+        triangles_offset_np = np.asarray(sphere.triangles) + num_target_vertices
+        triangles_offset = o3d.utility.Vector3iVector(triangles_offset_np)
+
+        # Extend the vertices and triangles of the target mesh with those of the source mesh
+        spheres.vertices.extend(sphere.vertices)
+        spheres.triangles.extend(triangles_offset )
+
+        # print("sphere triangles", np.shape(np.asarray(spheres.triangles))[0])
+
+        
+
+
+    spheres.paint_uniform_color(color)
+    spheres.compute_vertex_normals()
+
+    return spheres 
 
 if __name__ == '__main__':
     # try:

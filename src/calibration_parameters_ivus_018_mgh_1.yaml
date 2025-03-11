@@ -1,23 +1,23 @@
-/angle: 0.64
+/angle: 0.25
 /ascension_node/base_frame_id: ascension_origin
 /ascension_node/product_id: trakstar
 /ascension_node/root_frame_id: ascension_origin
 /ascension_node/target_frame_ids:
 - target1
 - target2
-/oclock: 1.96
+/oclock: 5.3
 /radial_offset: 0.00165
 /rosdistro: 'noetic
 
   '
-/roslaunch/uris/host_tdillon_thinkpad_p1_gen_5__39675: http://tdillon-ThinkPad-P1-Gen-5:39675/
+/roslaunch/uris/host_tdillon_thinkpad_p1_gen_5__34907: http://tdillon-ThinkPad-P1-Gen-5:34907/
 /rosversion: '1.16.0
 
   '
-/run_id: 7e743df8-fdf1-11ef-8317-bdd64613ecbc
+/run_id: 1131178c-eed5-11ef-8a8a-e90ba7ef8cac
 /scaling: 3.25e-05
 /threshold: 100
-/translation: 0.005
+/translation: 0.0065
 /usb_cam/framerate: 60
 /usb_cam/image_height: 1024
 /usb_cam/image_raw/compressed/format: jpeg

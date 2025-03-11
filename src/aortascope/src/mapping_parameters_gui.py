@@ -3,6 +3,7 @@ from tkinter import Tk, Label, Scale, Button, IntVar, filedialog, ttk, BooleanVa
 import numpy as np
 import time
 import sys
+from std_msgs.msg import Int32
 
 import run_normalizedSpace
 import concurrent.futures
@@ -129,28 +130,24 @@ def start_pullback():
     Set the pullback state to 1 (start).
     """
     
-    # pullback.set(1)
-    rospy.set_param("pullback", 1)
-    # update_parameters()
+    # rospy.set_param("pullback", 1)
+    # pullback_check = rospy.get_param("pullback", 0)
+    # print("pullback STARTED")
+    # print("pullback check", pullback_check)
 
-    pullback_check = rospy.get_param("pullback", 0)
-    
-    
-    print("pullback STARTED")
-    print("pullback check", pullback_check)
+    pullback_pub.publish(1)
 
 def stop_pullback():
     """
     Set the pullback state to 0 (stop).
     """
-    # pullback.set(0)
-    # update_parameters()
-    # print("pullback is", pullback)
-    rospy.set_param("pullback", 0)
 
-    pullback_check = rospy.get_param("pullback", 0)
-    print("pullback STOPPED")
-    print("pullback check", pullback_check)
+    # rospy.set_param("pullback", 0)
+    # pullback_check = rospy.get_param("pullback", 0)
+    # print("pullback STOPPED")
+    # print("pullback check", pullback_check)
+
+    pullback_pub.publish(0)
 
 # def update_progress(progress_bar, percent, value, root):
 #         value = rospy.get_param('funsr_percent', 0)
@@ -169,21 +166,47 @@ def quit_aortascope():
     time.sleep(0.3)
     rospy.signal_shutdown('User quitted')
     
+    
  
 
 try:
+
+
+    pullback_pub = rospy.Publisher('/pullback', Int32, queue_size=1)
+
     # Initialize rospy without creating a node
     rospy.init_node('mapping_parameters_gui', anonymous=True)
+
+    pullback_pub.publish(0)
 
     # Create the GUI window
     root = Tk()
     root.title("AortaScope")
 
     # single display
-    root.geometry("860x1320+10+10") 
+    # root.geometry("860x1320+10+10") 
 
-    # double display
-    # root.geometry("410x527+0+0") 
+
+
+    # change to 0.5 or 1 for single or double display
+    # display_scale_factor = 0.5
+
+    time.sleep(3)
+    double_display = rospy.get_param('double_display', 0)
+    print("gui double display is", double_display)
+    if(double_display == 1):
+        display_scale_factor =0.5
+        root.geometry("410x527+0+0")
+        
+
+    else:
+        display_scale_factor =1
+        root.geometry("860x1320+10+10")  
+        
+    
+ 
+
+
  
 
     # pullback start / stop
@@ -194,8 +217,7 @@ try:
     # Define button properties (font size and dimensions)
     standard_font_size = 14
     
-    # change to 1 or 0.5 for single or double display
-    display_scale_factor = 0.5
+    
 
     # single display
     standard_font_size = int( 14  * 0.8)
