@@ -249,7 +249,7 @@ try:
     save_data_button.grid(row=5, column=0, padx=padding_x, pady=padding_y)
 
     # Additional buttons
-    funsr_button = Button(root, text="Initialize Surface Registration", font=button_font, width=button_width, height=button_height, command = call_funsr)
+    funsr_button = Button(root, text="Initialize Registration", font=button_font, width=button_width, height=button_height, command = call_funsr)
     funsr_button.grid(row=6, column=0, padx=padding_x, pady=padding_y)
 
     load_button = Button(root, text="Load Previous Initialization", font=button_font, width=button_width, height=button_height, command = load_previous_surface_geometry)

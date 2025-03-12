@@ -357,6 +357,9 @@ class PointCloudUpdater:
                 except RuntimeError as e:
                     print("Error setting GPU configuration:", e)
 
+          
+           
+
             # for dissection mapping, load the GPU
 
             print(f"Python version: {sys.version}")
@@ -373,16 +376,22 @@ class PointCloudUpdater:
             
             model = tf.keras.Model(inputs=DRN_inputs_3, outputs=DRN_outputs_3)
 
+            
+
 
             # sub branch segmentation
             model.load_weights( self.model_path)  
 
 
-            model.compile(optimizer='adam',
-                    loss='sparse_categorical_crossentropy',
-                    metrics=['accuracy'])
+            # model.compile(optimizer='adam',
+            #         loss='sparse_categorical_crossentropy',
+            #         metrics=['accuracy'])
+
+            
 
             model.summary()
+
+            model = tf.function(model, jit_compile=True)
 
             self.model = model
 
@@ -692,7 +701,7 @@ class PointCloudUpdater:
 
         start_save = time.time()
 
-        print("self.image_tags", self.image_tags)
+        
 
         for (grayscale_image, TW_EM, image_tag) in zip(self.image_batch, self.tw_em_batch, self.image_tags):
             # if i % save_frequency == 0:
@@ -1202,6 +1211,10 @@ class PointCloudUpdater:
             
 
             mask_1 = cv2.resize(mask_1, (224, 224))
+            mask_2 = cv2.resize(mask_2, (224, 224))
+
+            mask_1_contour,hier = cv2.findContours(mask_1, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            mask_2_contour,hier = cv2.findContours(mask_2, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
            
             # color_image = cv2.resize(color_image, (224, 224))
@@ -1256,13 +1269,11 @@ class PointCloudUpdater:
 
             mask_1, mask_2 = deeplumen_segmentation(image,self.model)
 
-            # ensures the near lumen is always the one wit the probe in it
 
+            # ensures the near lumen is always the one wit the probe in it
             if(mask_2[112,112] == 255):
                 
-                placeholder_mask = copy.deepcopy(mask_1)
-                mask_1 = copy.deepcopy(mask_2)
-                mask_2 = placeholder_mask
+                mask_1, mask_2 = mask_2, mask_1
 
             elif(mask_1[112,112] !=255 and mask_2[112,112] != 255):
                 
@@ -1284,9 +1295,8 @@ class PointCloudUpdater:
 
                 if(overlapping_pixels_2 > overlapping_pixels_1): 
 
-                    placeholder_mask = copy.deepcopy(mask_1)
-                    mask_1 = copy.deepcopy(mask_2)
-                    mask_2 = placeholder_mask
+                   
+                    mask_1, mask_2 = mask_2, mask_1
 
                     mask_1 = cv2.bitwise_or(component_mask + mask_1)
             
@@ -1531,7 +1541,7 @@ class PointCloudUpdater:
         #             self.vis.update_geometry(self.processed_centreline)
 
 
-        # post process the bspline smoothing instead
+        # post process the bspline smoothing instead - this prevents overheating
         if(self.extend==1 and self.dissection_mapping != 1):
 
                 extrinsic_matrix = TW_EM @ TEM_C
@@ -1561,13 +1571,12 @@ class PointCloudUpdater:
         # ------- VOXBLOX TSDF MESHING -------- #
         
         if(self.extend == 1):
-            if(self.tsdf_map == 1):
+            if(self.tsdf_map == 1 ):
                 combined_mask = cv2.bitwise_or(mask_1, mask_2)
                 combined_mask = np.uint8(combined_mask)
                 three_d_points, three_d_points_near_lumen, three_d_points_far_lumen, three_d_points_dissection_flap = get_point_cloud_from_masks(combined_mask, scaling, mask_1_contour,mask_2_contour)
 
-            # deeplumen segmentation
-            if(self.tsdf_map ==1 and self.deeplumen_on == 1):
+       
                 
 
                 if(three_d_points_near_lumen is not None):
@@ -1587,10 +1596,7 @@ class PointCloudUpdater:
                 #     if(three_d_points_dissection_flap is not None):
                 #         update_tsdf_mesh(self.vis,self.tsdf_volume_dissection_flap,self.mesh_dissection_flap,three_d_points_dissection_flap, extrinsic_matrix,[0,1,0])
 
-            # manual segmentation
-            if(self.tsdf_map ==1 and self.deeplumen_on == 0):
-                if(three_d_points is not None):
-                    update_tsdf_mesh(self.vis, self.tsdf_volume,self.mesh,three_d_points, extrinsic_matrix,[1,0,0])
+
 
 
             
@@ -1692,6 +1698,7 @@ class PointCloudUpdater:
 
 
             # self.vis.update_geometry(self.point_cloud)
+            #JUST DONT VISUALIZE IT
             self.vis.update_geometry(self.volumetric_near_point_cloud)
             self.vis.update_geometry(self.volumetric_far_point_cloud)
 
