@@ -78,6 +78,8 @@ class PointCloudUpdater:
 
         # what number image callback are we on?
         self.image_call=1
+
+        self.image_number = 1
         
         
 
@@ -226,6 +228,8 @@ class PointCloudUpdater:
         self.mask_2_buffer = deque(maxlen=self.buffer_size)
         self.orifice_angles = deque(maxlen=5)
 
+        self.transformed_centroids=[]
+
         self.processed_centreline = o3d.geometry.PointCloud()
         self.vis.add_geometry(self.processed_centreline)
 
@@ -261,13 +265,23 @@ class PointCloudUpdater:
         # self.tsdf_volume_near_lumen = SimpleTsdfIntegrator(self.voxel_size, sdf_trunc)
         self.tsdf_volume_near_lumen = FastTsdfIntegrator(self.voxel_size, sdf_trunc)
         self.mesh_near_lumen=o3d.geometry.TriangleMesh()
-        self.vis.add_geometry(self.mesh_near_lumen)
+
+        if(self.dissection_mapping==1):
+            self.vis.add_geometry(self.mesh_near_lumen)
 
         # far lumen
         # self.tsdf_volume_far_lumen = SimpleTsdfIntegrator(self.voxel_size, sdf_trunc)
         self.tsdf_volume_far_lumen = FastTsdfIntegrator(self.voxel_size, sdf_trunc)
         self.mesh_far_lumen=o3d.geometry.TriangleMesh()
-        self.vis.add_geometry(self.mesh_far_lumen)
+
+        if(self.dissection_mapping==1):
+            self.vis.add_geometry(self.mesh_far_lumen)
+
+
+
+        if(self.dissection_mapping!=1):
+            self.mesh_near_lumen_lineset = o3d.geometry.LineSet()
+            self.vis.add_geometry(self.mesh_near_lumen_lineset)
 
         
 
@@ -480,10 +494,40 @@ class PointCloudUpdater:
         self.write_folder = rospy.get_param('dataset',0)
         self.image_batch=[]
         self.tw_em_batch=[]
+
+        self.image_tags=[]
+        self.starting_index = 1
         
         self.ecg_times=[]
         self.ecg_signal=[]
         self.image_times=[]
+
+        print("creating folders!")
+
+        if(self.write_folder ==0):
+            self.write_folder = self.prompt_for_folder()
+            
+        while(self.write_folder ==None):
+            self.write_folder = self.prompt_for_folder()
+
+        folder_path = self.write_folder + '/grayscale_images'
+        create_folder(folder_path)
+
+        folder_path = self.write_folder + '/transform_data'
+        create_folder(folder_path)
+
+        if(self.gating==1):
+
+            folder_path = self.write_folder + '/ecg_signal'
+            create_folder(folder_path)
+
+        print("creating folders!")
+
+        # for post processing of tracking data
+        folder_path = self.write_folder + '/pose_data'
+        create_folder(folder_path)
+
+    
 
     def funsr_started(self):
 
@@ -544,6 +588,7 @@ class PointCloudUpdater:
     def save_image_and_transform_data(self):
 
     
+
         # turn extend off!
         self.extend = 0
         self.record = 0
@@ -551,20 +596,16 @@ class PointCloudUpdater:
 
         time.sleep(1)
 
-        print("saving geometries!")
+        print("final save!")
 
         # is self.write_folder the same as these long paths:
         # dataset_directory + pc_updater.dataset_name + bin_name 
 
-        if(self.write_folder ==0):
-            self.write_folder = self.prompt_for_folder()
-            
-        while(self.write_folder ==None):
-            self.write_folder = self.prompt_for_folder()
+        
        
         rospy.set_param('dataset', self.write_folder)   
 
-        o3d.io.write_point_cloud(self.write_folder +  "/smoothed_bspline_centreline.ply", pc_updater.processed_centreline)
+        
 
         o3d.io.write_point_cloud(self.write_folder +  "/volumetric_near_point_cloud.ply", pc_updater.volumetric_near_point_cloud)
 
@@ -578,39 +619,44 @@ class PointCloudUpdater:
         o3d.io.write_point_cloud(self.write_folder +  "/boundary_near_point_cloud.ply", pc_updater.boundary_near_point_cloud)
 
 
+        # do spline smoothing in post processing
+        for transformed_centroid in self.transformed_centroids:
+        
+            # ----- ADD TO BUFFERS ------ #
+            self.centroid_buffer.append(transformed_centroid[:3])
+        
+            if(len(self.centroid_buffer) >= self.buffer_size):
+                self.delta_buffer_x, self.delta_buffer_y, self.delta_buffer_z,closest_points, centrepoints = process_centreline_bspline(self.centroid_buffer, self.delta_buffer_x,self.delta_buffer_y,self.delta_buffer_z, self.buffer_size)
+                self.processed_centreline.points.extend(o3d.utility.Vector3dVector(centrepoints))
+                self.processed_centreline.paint_uniform_color([1,0,0])
+
+        o3d.io.write_point_cloud(self.write_folder +  "/smoothed_bspline_centreline.ply", pc_updater.processed_centreline)
+
+
         save_frequency = 1 #doesnt work with ecg etc
 
         # dataset saving
         # if(self.record==1):
 
-        print("creating folders!")
-
-        folder_path = self.write_folder + '/grayscale_images'
-        create_folder(folder_path)
-
-        folder_path = self.write_folder + '/transform_data'
-        create_folder(folder_path)
-
-        if(self.gating==1):
-
-            folder_path = self.write_folder + '/ecg_signal'
-            create_folder(folder_path)
+    
 
         print("started saving")
         # Iterate through the image and TW_EM batches simultaneously
-        for i, (grayscale_image, TW_EM) in enumerate(zip(self.image_batch, self.tw_em_batch)):
+        for (grayscale_image, TW_EM, image_tag) in zip(self.image_batch, self.tw_em_batch, self.image_tags):
             # if i % save_frequency == 0:
             # Save the image
-            image_filename = f'{self.write_folder}/grayscale_images/grayscale_image_{self.image_call + i}.npy'
+            image_filename = f'{self.write_folder}/grayscale_images/grayscale_image_{self.starting_index + image_tag -1}.npy'
             with open(image_filename, 'wb') as f:
                 np.save(f, grayscale_image)
             
 
             # Save the TW_EM data
-            tw_em_filename = f'{self.write_folder}/transform_data/TW_EM_{self.image_call + i}.npy'
+            tw_em_filename = f'{self.write_folder}/transform_data/TW_EM_{self.starting_index + image_tag -1}.npy'
             with open(tw_em_filename, 'wb') as f:
                 np.save(f, TW_EM)
 
+
+        # this does not get saved intermittently, only at the end
         if(self.gating ==1):
 
             image_times = np.asarray(self.image_times) 
@@ -633,59 +679,75 @@ class PointCloudUpdater:
 
         print("finished saving images, transform and ecg data (if present)!")
 
+        
+
 
 
         return
+
+    def quick_save(self):
+
+        
+
+
+        start_save = time.time()
+
+        print("self.image_tags", self.image_tags)
+
+        for (grayscale_image, TW_EM, image_tag) in zip(self.image_batch, self.tw_em_batch, self.image_tags):
+            # if i % save_frequency == 0:
+            # Save the image
+            # image_filename = f'{self.write_folder}/grayscale_images/grayscale_image_{self.image_call + i}.npy'
+            image_filename = f'{self.write_folder}/grayscale_images/grayscale_image_{self.starting_index + image_tag -1}.npy'
+            with open(image_filename, 'wb') as f:
+                np.save(f, grayscale_image)
+            
+
+            # Save the TW_EM data
+            # tw_em_filename = f'{self.write_folder}/transform_data/TW_EM_{self.image_call + i}.npy'
+            tw_em_filename = f'{self.write_folder}/transform_data/TW_EM_{self.starting_index + image_tag -1}.npy'
+            with open(tw_em_filename, 'wb') as f:
+                np.save(f, TW_EM)
+
+
+
+        finish_save = time.time()
+        difference_time = finish_save - start_save
+        
+        print("time to save image batch", difference_time)
+        
+
+        self.starting_index = self.starting_index + image_tag
+
 
 
     def save_pose_data(self):
 
     
-        # turn extend off!
-        self.extend = 0
-        self.record = 0
-        
 
-        time.sleep(1)
-
-        print("saving poses!")
-
-        # is self.write_folder the same as these long paths:
-        # dataset_directory + pc_updater.dataset_name + bin_name 
-
-        
-
-        save_frequency = 10 #doesnt work with ecg etc
-
-        # dataset saving
-        # if(self.record==1):
-
-        print("creating folders!")
-
-        folder_path = self.write_folder + '/pose_data'
-        create_folder(folder_path)
-
-       
-
-    
-        print("started saving pose data")
+   
         # Iterate through the image and TW_EM batches simultaneously
         i=0
-        for TW_EM in self.pose_batch:
+        for (TW_EM, image_tag) in zip(self.pose_batch, self.image_tags):
        
         
 
             # Save the TW_EM data
-            tw_em_filename = f'{self.write_folder}/pose_data/TW_EM_{self.image_call + i}.npy'
+            tw_em_filename = f'{self.write_folder}/pose_data/TW_EM_{self.starting_index + image_tag -1}.npy'
             with open(tw_em_filename, 'wb') as f:
                 np.save(f, TW_EM)
 
             i=i+1
 
+        self.starting_index = self.starting_index + image_tag
+
 
 
 
         return
+
+
+
         
 
     
@@ -761,10 +823,11 @@ class PointCloudUpdater:
 
         self.load_parameters(config_yaml)
 
-        self.record_poses = 1
+        
         if(self.record_poses == 1):
             self.pose_batch=[]
-            # self.record_poses = 1 #read in later
+            self.image_tags=[]
+           
 
         # GUI SPECIFIC
 
@@ -904,6 +967,7 @@ class PointCloudUpdater:
 
     def close_app(self):
         cv2.destroyAllWindows()
+        print("app closing")
         self.save_pose_data()
         rospy.signal_shutdown('User quitted')
 
@@ -988,8 +1052,8 @@ class PointCloudUpdater:
         end_time = time.time()
         diff_time = end_time - start_time 
  
-        
-        # how to make this faster
+        print("image number is", self.image_number)
+        # recording
         if(self.record==1):
             # code for saving images
 
@@ -997,9 +1061,38 @@ class PointCloudUpdater:
             self.tw_em_batch.append(TW_EM)
             self.image_times.append(image_timestamp_in_seconds)
 
+            self.image_tags.append(self.image_number)
+
+            self.image_number = self.image_number+1
+
         if(self.record_poses==1):
 
             self.pose_batch.append(TW_EM)
+
+            self.image_tags.append(self.image_number)
+
+            self.image_number = self.image_number+1
+
+        # reset memory for efficiency
+        if(self.record == 1):
+            if(len(self.image_batch)>150):
+
+                # consider using threading while saving to save time
+                self.quick_save()
+
+                #clear the image batch and save the callback number
+                self.image_batch = []
+                self.tw_em_branch = []
+                self.image_tags = []
+                self.image_number = 1
+                
+
+        if(self.record_poses == 1):
+            if(len(self.image_batch)>500):
+                self.save_pose_data()
+                self.pose_batch = [] 
+                self.image_tags = [] 
+                self.image_number = 1
 
         # for computational efficiency, stop here and do all processing / reconstruction later
         if(self.tsdf_map != 1 and self.vpC_map != 1 and self.bpC_map!=1):
@@ -1417,6 +1510,28 @@ class PointCloudUpdater:
 
         
 
+        # if(self.extend==1 and self.dissection_mapping != 1):
+
+        #         extrinsic_matrix = TW_EM @ TEM_C
+                
+        #         # ---- GET 3D CENTROIDS ----- #
+        #         three_d_centroid = np.hstack((0,two_d_centroid))
+        #         three_d_centroid=np.hstack((three_d_centroid,1)).T
+        #         transformed_centroid = extrinsic_matrix @ three_d_centroid
+                
+        #         # ----- ADD TO BUFFERS ------ #
+        #         self.centroid_buffer.append(transformed_centroid[:3])
+        #         self.position_buffer.append(extrinsic_matrix)
+
+            
+        #         if(len(self.centroid_buffer) >= self.buffer_size):
+        #             self.delta_buffer_x, self.delta_buffer_y, self.delta_buffer_z,closest_points, centrepoints = process_centreline_bspline(self.centroid_buffer, self.delta_buffer_x,self.delta_buffer_y,self.delta_buffer_z, self.buffer_size)
+        #             self.processed_centreline.points.extend(o3d.utility.Vector3dVector(centrepoints))
+        #             self.processed_centreline.paint_uniform_color([1,0,0])
+        #             self.vis.update_geometry(self.processed_centreline)
+
+
+        # post process the bspline smoothing instead
         if(self.extend==1 and self.dissection_mapping != 1):
 
                 extrinsic_matrix = TW_EM @ TEM_C
@@ -1425,17 +1540,10 @@ class PointCloudUpdater:
                 three_d_centroid = np.hstack((0,two_d_centroid))
                 three_d_centroid=np.hstack((three_d_centroid,1)).T
                 transformed_centroid = extrinsic_matrix @ three_d_centroid
-                
-                # ----- ADD TO BUFFERS ------ #
-                self.centroid_buffer.append(transformed_centroid[:3])
-                self.position_buffer.append(extrinsic_matrix)
+                self.transformed_centroids.append(transformed_centroid)
 
-            
-                if(len(self.centroid_buffer) >= self.buffer_size):
-                    self.delta_buffer_x, self.delta_buffer_y, self.delta_buffer_z,closest_points, centrepoints = process_centreline_bspline(self.centroid_buffer, self.delta_buffer_x,self.delta_buffer_y,self.delta_buffer_z, self.buffer_size)
-                    self.processed_centreline.points.extend(o3d.utility.Vector3dVector(centrepoints))
-                    self.processed_centreline.paint_uniform_color([1,0,0])
-                    self.vis.update_geometry(self.processed_centreline)
+                
+                       
 
 
         # ------ NON SMOOTHED ESDF MESHING ------ #
@@ -1458,12 +1566,19 @@ class PointCloudUpdater:
                 combined_mask = np.uint8(combined_mask)
                 three_d_points, three_d_points_near_lumen, three_d_points_far_lumen, three_d_points_dissection_flap = get_point_cloud_from_masks(combined_mask, scaling, mask_1_contour,mask_2_contour)
 
-            # disssection
+            # deeplumen segmentation
             if(self.tsdf_map ==1 and self.deeplumen_on == 1):
                 
 
                 if(three_d_points_near_lumen is not None):
                     update_tsdf_mesh(self.vis, self.tsdf_volume_near_lumen,self.mesh_near_lumen,three_d_points_near_lumen, extrinsic_matrix,[1,0,0])
+
+                    if(self.dissection_mapping!=1 and np.shape(np.array(self.mesh_near_lumen.vertices))[0]>0):
+                        temp_lineset = create_wireframe_lineset_from_mesh(self.mesh_near_lumen) 
+                        self.mesh_near_lumen_lineset.points = temp_lineset.points
+                        self.mesh_near_lumen_lineset.lines = temp_lineset.lines
+                        self.vis.update_geometry(self.mesh_near_lumen_lineset)
+
                 if(three_d_points_far_lumen is not None):
                     update_tsdf_mesh(self.vis,self.tsdf_volume_far_lumen,self.mesh_far_lumen,three_d_points_far_lumen, extrinsic_matrix,[0,0,1])
                 
@@ -1472,10 +1587,12 @@ class PointCloudUpdater:
                 #     if(three_d_points_dissection_flap is not None):
                 #         update_tsdf_mesh(self.vis,self.tsdf_volume_dissection_flap,self.mesh_dissection_flap,three_d_points_dissection_flap, extrinsic_matrix,[0,1,0])
 
-            # healthy
+            # manual segmentation
             if(self.tsdf_map ==1 and self.deeplumen_on == 0):
                 if(three_d_points is not None):
                     update_tsdf_mesh(self.vis, self.tsdf_volume,self.mesh,three_d_points, extrinsic_matrix,[1,0,0])
+
+
             
 
         # ------- VOLUMETRIC POINT CLOUD 3D ----- #
@@ -1629,20 +1746,39 @@ class PointCloudUpdater:
             view_control.set_zoom(0.01)
 
 
+
+        
+
         # ----- FOLLOW THE PROBE ------- #
         # make this a check box
         # look at centroid of all the data?
 
-        if(self.vpC_map ==1):
-            if(self.volumetric_near_point_cloud is not None):
+        if(self.tsdf_map ==1):
+            vertices_of_interest = np.asarray(self.mesh_near_lumen.vertices)
+            if(vertices_of_interest is not None):
                 view_control_1 = self.vis.get_view_control()
                 camera_parameters_1 = view_control_1.convert_to_pinhole_camera_parameters()
-                points = np.asarray(self.volumetric_near_point_cloud.points)  # Convert point cloud to numpy array
-                centroid = np.mean(points, axis=0) 
+                if(np.size(vertices_of_interest)>0):
+                    centroid = np.mean(vertices_of_interest, axis=0) 
+                else:
+                    centroid = np.asarray([0,0,0])
                 position_tracker = TW_EM[:3,3]
                 average_point = (centroid+position_tracker)/2
                 lookat = average_point
                 view_control_1.set_lookat(lookat)
+            
+
+
+        # if(self.vpC_map ==1):
+        #     if(self.volumetric_near_point_cloud is not None):
+        #         view_control_1 = self.vis.get_view_control()
+        #         camera_parameters_1 = view_control_1.convert_to_pinhole_camera_parameters()
+        #         points = np.asarray(self.volumetric_near_point_cloud.points)  # Convert point cloud to numpy array
+        #         centroid = np.mean(points, axis=0) 
+        #         position_tracker = TW_EM[:3,3]
+        #         average_point = (centroid+position_tracker)/2
+        #         lookat = average_point
+        #         view_control_1.set_lookat(lookat)
 
 
 
@@ -1764,6 +1900,9 @@ class PointCloudUpdater:
 
         self.vis.poll_events()
         self.vis.update_renderer()
+
+    
+            
 
   
 
