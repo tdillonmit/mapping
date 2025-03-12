@@ -1,7 +1,6 @@
 #!/usr/bin/env python3.9
 
 import rospy
-import sys
 from sensor_msgs.msg import Image
 from sensor_msgs.msg import CameraInfo
 from geometry_msgs.msg import TransformStamped
@@ -66,7 +65,10 @@ class PointCloudUpdater:
         # ------- INITIALIZE DEEPLUMEN ML MODEL ------- #
         tf.keras.backend.clear_session()
         tf.compat.v1.reset_default_graph()
-        self.initialize_deeplumen_model()
+     
+        if not hasattr(self, 'model'):
+            self.initialize_deeplumen_model()
+
 
         self.image_width = rospy.get_param('/usb_cam/image_width', default=1280)
         self.image_height = rospy.get_param('/usb_cam/image_height', default=1024)
@@ -346,30 +348,8 @@ class PointCloudUpdater:
     def initialize_deeplumen_model(self):
         
         if(self.deeplumen_on == 1):
+
             
-            gpus = tf.config.experimental.list_physical_devices('GPU')
-            if gpus:
-                try:
-                    # Setting memory growth and limiting memory use for the first GPU
-                    tf.config.experimental.set_memory_growth(gpus[0], True)  # Allow TensorFlow to allocate memory dynamically
-                    # Optional: Set memory limit for a GPU
-                    # tf.config.experimental.set_virtual_device_configuration(gpus[0], [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=0)])
-                except RuntimeError as e:
-                    print("Error setting GPU configuration:", e)
-
-          
-           
-
-            # for dissection mapping, load the GPU
-
-            print(f"Python version: {sys.version}")
-            print(f"Version info: {sys.version_info}")
-            print(f"TensorFlow version: {tf.__version__}")
-            
-
-            gpus = tf.config.experimental.list_physical_devices('GPU')
-            if gpus:
-                tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
 
             DRN_inputs_3,DRN_outputs_3 = get_DRN_network()
 
@@ -377,20 +357,14 @@ class PointCloudUpdater:
             model = tf.keras.Model(inputs=DRN_inputs_3, outputs=DRN_outputs_3)
 
             
-
-
             # sub branch segmentation
             model.load_weights( self.model_path)  
 
 
-            # model.compile(optimizer='adam',
-            #         loss='sparse_categorical_crossentropy',
-            #         metrics=['accuracy'])
-
-            
-
+        
             model.summary()
 
+            # this makes compilation 20x faster!!
             model = tf.function(model, jit_compile=True)
 
             self.model = model
@@ -778,7 +752,11 @@ class PointCloudUpdater:
         # self.vis2.add_geometry(ivus_funsr_mesh)
 
         self.deeplumen_on = 0
-        # self.initialize_deeplumen_model()
+
+        if not hasattr(self, 'model'):
+            self.initialize_deeplumen_model()
+
+      
 
 
         
@@ -916,7 +894,10 @@ class PointCloudUpdater:
 
 
             self.deeplumen_on = 1
-            self.initialize_deeplumen_model()
+           
+
+            if not hasattr(self, 'model'):
+                self.initialize_deeplumen_model()
 
             
 
@@ -1267,7 +1248,10 @@ class PointCloudUpdater:
 
             # #---------- SEGMENTATION --------------#
 
-            mask_1, mask_2 = deeplumen_segmentation(image,self.model)
+            # mask_1, mask_2 = deeplumen_segmentation(image,self.model)
+            pred= deeplumen_segmentation(image,self.model)
+            raw_data = pred[0].numpy()
+            mask_1, mask_2 = post_process_deeplumen(raw_data)
 
 
             # ensures the near lumen is always the one wit the probe in it
