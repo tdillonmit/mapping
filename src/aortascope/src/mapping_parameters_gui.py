@@ -92,6 +92,7 @@ def call_register():
     visualize = 0
     root.percent.config(text = "Computing Registration")
     root.update_idletasks()
+    print("calling registration indirectly")
     call_registration_indirectly(dataset, visualize)
     root.percent.config(text = "Registration Complete")
     rospy.set_param('registration_done', 1)

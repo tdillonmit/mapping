@@ -17,7 +17,8 @@ import yaml
 import os
 import time
 import random
-import threading
+# import threading
+import subprocess
 from collections import deque
 import gc
 # import snake as sn
@@ -31,9 +32,48 @@ from voxblox import (
 
 from segmentation_helpers import *
 from reconstruction_helpers import *
-from numba import cuda
+# from numba import cuda
 import tkinter as tk
 from tkinter import filedialog
+
+
+
+
+
+def get_gpu_temp():
+
+    result = subprocess.run(['nvidia-smi', '--query-gpu=temperature.gpu', '--format=csv,noheader,nounits'],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    print("GPU temp:", int(result.stdout.strip()))
+
+# def get_cpu_temp():
+ 
+#     result = subprocess.run(['sensors'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+#     print(result.stdout)
+#     # for line in result.stdout.split('\n'):
+#     #     if 'Package id 0' in line:  # For Intel CPUs
+#     #         temp = float(line.split('+')[1].split('°C')[0])
+#     #         print("CPU temp:", temp)
+
+# def get_cpu_temp():
+#     result = subprocess.run(['sensors'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    
+#     inside_coretemp_block = False
+    
+#     for line in result.stdout.split('\n'):
+#         if 'coretemp-isa-0000' in line:
+#             inside_coretemp_block = True
+#         elif inside_coretemp_block and line.strip() == '':
+#             # Stop when you reach an empty line (indicating the next block)
+#             break
+#         if inside_coretemp_block:
+#             print(line)
+
+
+
+    
+
+
 
 
 class PointCloudUpdater:
@@ -332,7 +372,7 @@ class PointCloudUpdater:
        
 
         if(self.gating ==1):
-            self.lock = threading.Lock()  # A lock to ensure thread safety
+            # self.lock = threading.Lock()  # A lock to ensure thread safety
             self.ecg_sub = rospy.Subscriber('ecg', Int32, self.ecg_callback)
             
         self.rgb_image_pub = rospy.Publisher('/rgb_image', Image, queue_size=1)
@@ -520,8 +560,8 @@ class PointCloudUpdater:
         tf.keras.backend.clear_session()
         tf.compat.v1.reset_default_graph()
         del self.model
-        cuda.select_device(0)
-        cuda.close()
+        # cuda.select_device(0)
+        # cuda.close()
         gc.collect()
         
         print("cleared session!")
@@ -538,8 +578,8 @@ class PointCloudUpdater:
         tf.keras.backend.clear_session()
         tf.compat.v1.reset_default_graph()
         del self.model
-        cuda.select_device(0)
-        cuda.close()
+        # cuda.select_device(0)
+        # cuda.close()
         gc.collect()
         
         print("cleared session!")
@@ -1174,6 +1214,9 @@ class PointCloudUpdater:
                                             int(ellipse_model[2]), 0, 360, 5)
 
             # insert IVUSProcSegmentation instead
+
+            # get_gpu_temp()
+            # get_cpu_temp()
             
             
 
@@ -1248,47 +1291,58 @@ class PointCloudUpdater:
 
             # #---------- SEGMENTATION --------------#
 
+
+            start_time = time.time()
+
             # mask_1, mask_2 = deeplumen_segmentation(image,self.model)
             pred= deeplumen_segmentation(image,self.model)
             raw_data = pred[0].numpy()
             mask_1, mask_2 = post_process_deeplumen(raw_data)
 
+            # get_gpu_temp()
+            # get_cpu_temp()
 
-            # ensures the near lumen is always the one wit the probe in it
-            if(mask_2[112,112] == 255):
+            end_time=time.time()
+            diff_time=end_time-start_time
+            print("segmentation time:", diff_time)
+
+         
+
+            # ensures the near lumen is always the one with the probe in it
+            # if(mask_2[112,112] == 255):
                 
-                mask_1, mask_2 = mask_2, mask_1
+            #     mask_1, mask_2 = mask_2, mask_1
 
-            elif(mask_1[112,112] !=255 and mask_2[112,112] != 255):
+            # elif(mask_1[112,112] !=255 and mask_2[112,112] != 255):
                 
-                ret, mask = cv2.threshold(grayscale_image, threshold, 255, cv2.THRESH_BINARY)
-                num_labels, labels = cv2.connectedComponents(mask)
-                component_label = labels[112,112]
+            #     ret, mask = cv2.threshold(grayscale_image, threshold, 255, cv2.THRESH_BINARY)
+            #     num_labels, labels = cv2.connectedComponents(mask)
+            #     component_label = labels[112,112]
 
-                component_mask = np.zeros_like(mask)
-                component_mask[labels == component_label] = 255
+            #     component_mask = np.zeros_like(mask)
+            #     component_mask[labels == component_label] = 255
 
-                overlap_mask = cv2.bitwise_and(component_mask, mask_1)
-                overlapping_pixels_1 = cv2.countNonZero(overlap_mask)
+            #     overlap_mask = cv2.bitwise_and(component_mask, mask_1)
+            #     overlapping_pixels_1 = cv2.countNonZero(overlap_mask)
 
-                overlap_mask = cv2.bitwise_and(component_mask, mask_2)
-                overlapping_pixels_2 = cv2.countNonZero(overlap_mask)
+            #     overlap_mask = cv2.bitwise_and(component_mask, mask_2)
+            #     overlapping_pixels_2 = cv2.countNonZero(overlap_mask)
 
-                if(overlapping_pixels_1 > overlapping_pixels_2):
-                    mask_1 = cv2.bitwise_or(component_mask + mask_1)
+            #     if(overlapping_pixels_1 > overlapping_pixels_2):
+            #         mask_1 = cv2.bitwise_or(component_mask + mask_1)
 
-                if(overlapping_pixels_2 > overlapping_pixels_1): 
+            #     if(overlapping_pixels_2 > overlapping_pixels_1): 
 
                    
-                    mask_1, mask_2 = mask_2, mask_1
+            #         mask_1, mask_2 = mask_2, mask_1
 
-                    mask_1 = cv2.bitwise_or(component_mask + mask_1)
+            #         mask_1 = cv2.bitwise_or(component_mask + mask_1)
             
 
             
 
-            self.mask_1_buffer.append(mask_1)
-            self.mask_2_buffer.append(mask_2)
+            # self.mask_1_buffer.append(mask_1)
+            # self.mask_2_buffer.append(mask_2)
 
             branch_pixels = np.count_nonzero(mask_2)
 
@@ -1641,11 +1695,11 @@ class PointCloudUpdater:
                             pass
 
 
-                # if(self.extend == 1 ):
+                if(self.extend == 1 and self.dissection_mapping == 1):
                 #     # prevent memory issues by commenting this out
-                #     self.volumetric_near_point_cloud.points.extend(near_vpC_points.points)
-                # else:
-                self.volumetric_near_point_cloud.points = near_vpC_points.points
+                    self.volumetric_near_point_cloud.points.extend(near_vpC_points.points)
+                else:
+                    self.volumetric_near_point_cloud.points = near_vpC_points.points
 
 
                 self.volumetric_near_point_cloud.paint_uniform_color([1,0,0])
@@ -1670,13 +1724,13 @@ class PointCloudUpdater:
                 far_vpC_points.colors = o3d.utility.Vector3dVector(duplicated_pass_colors)
 
 
-                # if(self.extend == 1):
+                if(self.extend == 1 and self.dissection_mapping == 1):
                 #     # prevent memory issues by commenting this out
-                #     self.volumetric_far_point_cloud.points.extend(far_vpC_points.points)
-                #     self.volumetric_far_point_cloud.colors.extend(far_vpC_points.colors)
-                # else:
-                self.volumetric_far_point_cloud.points = far_vpC_points.points
-                self.volumetric_far_point_cloud.colors = far_vpC_points.colors
+                    self.volumetric_far_point_cloud.points.extend(far_vpC_points.points)
+                    self.volumetric_far_point_cloud.colors.extend(far_vpC_points.colors)
+                else:
+                    self.volumetric_far_point_cloud.points = far_vpC_points.points
+                    self.volumetric_far_point_cloud.colors = far_vpC_points.colors
 
                 # self.volumetric_far_point_cloud.paint_uniform_color([0,0,1])
 

@@ -14,6 +14,7 @@ from std_msgs.msg import Header  # Import Header
 import yaml
 import glob
 import os
+import time
 
 def make_crosshairs_crop(new_height,new_width,crosshair_width,crosshair_height,crosshair_vert_coordinates,crosshair_horiz_coordinates):
 
@@ -265,6 +266,7 @@ def revised_fiducial_model_registration(model, fiducial_1,reference_1, em_frame)
     rotated_model=copy.deepcopy(string_phantom)
 
     # grab normal of 2000th fiducial1 and 2
+    time.sleep(1)
     x_axis=fiducial_1[:3,0]
     print("x axis of fiducial is", x_axis)
  
@@ -276,10 +278,16 @@ def revised_fiducial_model_registration(model, fiducial_1,reference_1, em_frame)
     angle_degrees,angle_radians=angle_between_vectors([0,1],x_axis[:2])
 
     # small optional prerotation - this is specifc to a particular sensor mounting
-    prerotation=(-3.25)*(np.pi/180) 
+    # needs to be varied if you haven't marked the rotational orientation of the EM tracker with a marker
+    # though you can also determine the angle by touching the string phantom at two points with the probe and run this program
+    # consider it calibrating the string phantom itself
+
+    # the probe isnt perfectly straight when mounted due to drill hole
+    prerotation=(3.25)*(np.pi/180) 
     # prerotation=(0)*(np.pi/180) 
 
     angle_radians=angle_radians+prerotation
+    angle_radians = - angle_radians
     alignment_rotation=[[np.cos(angle_radians),-np.sin(angle_radians),0],[np.sin(angle_radians),np.cos(angle_radians),0],[0,0,1]]
 
     alignment_transform=np.eye(4)
