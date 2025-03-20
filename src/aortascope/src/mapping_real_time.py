@@ -385,6 +385,15 @@ class PointCloudUpdater:
         self.dest_frame = 'target1'
 
 
+        # initialize view above the phantom
+        view_control_1 = self.vis.get_view_control()
+
+        view_control_1.set_up([0,-1,0])
+
+        view_control_1.set_front([0,0,-1])
+
+        
+
     def initialize_deeplumen_model(self):
         
         if(self.deeplumen_on == 1):
@@ -818,18 +827,32 @@ class PointCloudUpdater:
         self.extend = 0
         self.record = 0
         try:
+            
             self.vis.remove_geometry(self.processed_centreline)
             self.vis.remove_geometry(ivus_funsr_lineset)
             self.vis.remove_geometry(ivus_funsr_mesh)
             
         except NameError:
-            print("no geometries to delete")
+            print("no geometries to delete!")
 
         
-        
-        self.vis.remove_geometry(self.us_frame)
-        self.vis.remove_geometry(self.volumetric_near_point_cloud)
-        self.vis.remove_geometry(self.volumetric_far_point_cloud)
+        try:
+            self.vis.remove_geometry(self.us_frame)
+        except:
+            print("no us frame present")
+        try:
+            self.vis.remove_geometry(self.mesh_near_lumen)
+        except:
+            print("no near lumen present")
+
+        try:
+            self.vis.remove_geometry(self.volumetric_near_point_cloud)
+        except:
+            print("no volumetric near point cloud present")
+        try:
+            self.vis.remove_geometry(self.volumetric_far_point_cloud)
+        except:
+            print("no volumetric far point cloud present")
         
         
 
@@ -844,11 +867,13 @@ class PointCloudUpdater:
         # load the yaml file - specific to post processing
 
         # design checkbox for this
-        # with open('/home/tdillon/mapping/src/aortascope_tracking_params.yaml', 'r') as file:
-        with open('/home/tdillon/mapping/src/aortascope_tracking_params_dissection.yaml', 'r') as file:
+        print("loading tracking yaml")
+        with open('/home/tdillon/mapping/src/aortascope_tracking_params.yaml', 'r') as file:
+        # with open('/home/tdillon/mapping/src/aortascope_tracking_params_dissection.yaml', 'r') as file:
             config_yaml = yaml.safe_load(file)
 
         self.load_parameters(config_yaml)
+        print("loaded tracking yaml")
 
         
         if(self.record_poses == 1):
@@ -857,14 +882,19 @@ class PointCloudUpdater:
            
 
         # GUI SPECIFIC
-
+        if hasattr(self, 'registered_ct') and self.registered_ct is not None:
+            print("registered_ct is", self.registered_ct)
+        else:
+            print("registered_ct is not defined or is None")
         if(self.registered_ct ==1):
 
+            print("loading registration lineset")
             self.registered_ct_lineset = o3d.io.read_line_set(self.write_folder+ '' + '/final_registration.ply')
+            print("loading registration mesh")
             self.registered_ct_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/final_registration_mesh.ply')
             self.registered_ct_mesh.remove_unreferenced_vertices()
 
-            self.registered_ct_mesh_2 = self.registered_ct_mesh_2.subdivide_loop(number_of_iterations=2)
+            self.registered_ct_mesh_2 = self.registered_ct_mesh.subdivide_loop(number_of_iterations=2)
 
 
             ct_centroid_pc = o3d.io.read_point_cloud(self.write_folder + '/side_branch_centrelines.ply')
@@ -895,13 +925,24 @@ class PointCloudUpdater:
 
             self.vis.add_geometry(self.registered_ct_lineset)
             self.vis.add_geometry(self.ct_spheres)
-            
+
+
             
             print("registered the ct from non rigid icp!!")
 
-            self.scene = o3d.t.geometry.RaycastingScene()
-            self.registered_ct_mesh = o3d.t.geometry.TriangleMesh.from_legacy(self.registered_ct_mesh)
-            _ = self.scene.add_triangles(self.registered_ct_mesh)  # we do not need the geometry ID for mesh
+            # self.scene = o3d.t.geometry.RaycastingScene()
+            # self.registered_ct_mesh = o3d.t.geometry.TriangleMesh.from_legacy(self.registered_ct_mesh)
+            # _ = self.scene.add_triangles(self.registered_ct_mesh)  # we do not need the geometry ID for mesh
+
+            # Get current camera parameters
+            view_control_1 = self.vis.get_view_control()
+
+            view_control_1.set_up([0,-1,0])
+
+            view_control_1.set_front([0,0,-1])
+            
+
+            view_control_1.set_zoom(0.25)
 
         if(self.live_deformation == 1):
             self.constraint_radius=self.default_values['/constraint_radius'] 
@@ -910,31 +951,31 @@ class PointCloudUpdater:
             # test_pc= o3d.geometry.PointCloud() 
             # test_pc.points = o3d.utility.Vector3dVector(np.asarray(self.registered_ct_mesh.vertices)[self.constraint_indices,:])
 
+        if(self.dissection_mapping == 1):
+            if(self.dissection_track == 1):
 
-        if(self.dissection_track == 1):
+                self.dissection_lumen_1 = o3d.io.read_triangle_mesh(self.write_folder + '/near_lumen_mesh.ply')
+                self.dissection_lumen_2 = o3d.io.read_triangle_mesh(self.write_folder + '/far_lumen_mesh.ply')
 
-            self.dissection_lumen_1 = o3d.io.read_triangle_mesh(self.write_folder + '/near_lumen_mesh.ply')
-            self.dissection_lumen_2 = o3d.io.read_triangle_mesh(self.write_folder + '/far_lumen_mesh.ply')
+                self.dissection_lumen_1.compute_vertex_normals()
+                self.dissection_lumen_2.compute_vertex_normals()
 
-            self.dissection_lumen_1.compute_vertex_normals()
-            self.dissection_lumen_2.compute_vertex_normals()
+                self.dissection_lumen_1.paint_uniform_color([1,0,0])
+                self.dissection_lumen_2.paint_uniform_color([0,0,1])
 
-            self.dissection_lumen_1.paint_uniform_color([1,0,0])
-            self.dissection_lumen_2.paint_uniform_color([0,0,1])
+                self.vis.add_geometry(self.dissection_lumen_1)
+                self.vis.add_geometry(self.dissection_lumen_2)
 
-            self.vis.add_geometry(self.dissection_lumen_1)
-            self.vis.add_geometry(self.dissection_lumen_2)
+                self.vis2.add_geometry(self.dissection_lumen_1)
+                self.vis2.add_geometry(self.dissection_lumen_2)
 
-            self.vis2.add_geometry(self.dissection_lumen_1)
-            self.vis2.add_geometry(self.dissection_lumen_2)
+                
 
-            
-
-            self.vis2.add_geometry(self.tracker)
+                self.vis2.add_geometry(self.tracker)
 
 
-            self.deeplumen_on = 1
-           
+        if(self.deeplumen_on ==1):
+    
 
             if not hasattr(self, 'model'):
                 self.initialize_deeplumen_model()
@@ -1067,14 +1108,15 @@ class PointCloudUpdater:
         start_time = time.time()
         grayscale_image=preprocess_ivus_image(rgb_image,self.box_crop,self.circle_crop,self.text_crop,self.crosshairs_crop)
 
-        if(np.all(grayscale_image) == 0):
-            rgb_image = rgb_image.copy()
-            center = (self.centre_x, self.centre_y)  # (x, y) coordinates of the circle center
-            radius = int(self.centre_x/2)  # Radius of the circle
-            color = (255)  # White color in BGR format
-            thickness = 5  # -1 to fill the circle, >0 for border thickness
-            cv2.circle(grayscale_image, center, radius, color, thickness)
-            # cv2.imshow("test image", grayscale_image)
+        # test image
+        # if(np.all(grayscale_image) == 0):
+        #     rgb_image = rgb_image.copy()
+        #     center = (self.centre_x, self.centre_y)  # (x, y) coordinates of the circle center
+        #     radius = int(self.centre_x/2)  # Radius of the circle
+        #     color = (255)  # White color in BGR format
+        #     thickness = 5  # -1 to fill the circle, >0 for border thickness
+        #     cv2.circle(grayscale_image, center, radius, color, thickness)
+        #     # cv2.imshow("test image", grayscale_image)
             
 
         # original_image = copy.deepcopy(grayscale_image)
@@ -1618,7 +1660,7 @@ class PointCloudUpdater:
                 
 
                 if(three_d_points_near_lumen is not None):
-                    update_tsdf_mesh(self.vis, self.tsdf_volume_near_lumen,self.mesh_near_lumen,three_d_points_near_lumen, extrinsic_matrix,[1,0,0])
+                    update_tsdf_mesh(self.vis, self.tsdf_volume_near_lumen,self.mesh_near_lumen,three_d_points_near_lumen, extrinsic_matrix,[1,0,0], keep_largest=False)
 
                     if(self.dissection_mapping!=1 and np.shape(np.array(self.mesh_near_lumen.vertices))[0]>0):
                         temp_lineset = create_wireframe_lineset_from_mesh(self.mesh_near_lumen) 
@@ -1627,7 +1669,7 @@ class PointCloudUpdater:
                         self.vis.update_geometry(self.mesh_near_lumen_lineset)
 
                 if(three_d_points_far_lumen is not None):
-                    update_tsdf_mesh(self.vis,self.tsdf_volume_far_lumen,self.mesh_far_lumen,three_d_points_far_lumen, extrinsic_matrix,[0,0,1])
+                    update_tsdf_mesh(self.vis,self.tsdf_volume_far_lumen,self.mesh_far_lumen,three_d_points_far_lumen, extrinsic_matrix,[0,0,1], keep_largest =False)
                 
                 # dissection flap parameterization no longer needed
                 # if(tsdf_map == 1):
@@ -1658,6 +1700,7 @@ class PointCloudUpdater:
                     #  o3d.visualization.draw_geometries([self.registered_ct_mesh, self.centerline_pc, coordinate_frame, near_pC_points])
 
                      try:
+                        
                         deformed_mesh = live_deform(self.registered_ct_mesh, self.constraint_indices, self.centerline_pc, TW_EM @ TEM_C, near_vpC_points )
                         temp_lineset = create_wireframe_lineset_from_mesh(deformed_mesh)
                         self.registered_ct_lineset.points = temp_lineset.points
@@ -1667,7 +1710,9 @@ class PointCloudUpdater:
                         self.registered_ct_mesh_2.vertices = deformed_mesh.vertices
                         self.registered_ct_mesh_2.compute_vertex_normals()
                         self.vis2.update_geometry(self.registered_ct_mesh_2)
+                       
                      except:
+                        print("IVUS live mesh deformation not working")
                         pass
 
                 # EM BASED DEFORMATION
@@ -1692,6 +1737,7 @@ class PointCloudUpdater:
                             self.registered_ct_mesh_2.compute_vertex_normals()
                             self.vis2.update_geometry(self.registered_ct_mesh_2)
                         except:
+                            print("EM live mesh deformation not working")
                             pass
 
 
@@ -1724,7 +1770,8 @@ class PointCloudUpdater:
                 far_vpC_points.colors = o3d.utility.Vector3dVector(duplicated_pass_colors)
 
 
-                if(self.extend == 1 and self.dissection_mapping == 1):
+                # if(self.extend == 1 and self.dissection_mapping == 1):
+                if(self.extend == 1):
                 #     # prevent memory issues by commenting this out
                     self.volumetric_far_point_cloud.points.extend(far_vpC_points.points)
                     self.volumetric_far_point_cloud.colors.extend(far_vpC_points.colors)
@@ -1801,6 +1848,27 @@ class PointCloudUpdater:
         if(self.tsdf_map ==1):
             vertices_of_interest = np.asarray(self.mesh_near_lumen.vertices)
             if(vertices_of_interest is not None):
+
+                # set initial 3D view
+
+                # view_control = self.vis.get_view_control()
+                # camera_parameters = view_control.convert_to_pinhole_camera_parameters()
+
+        
+                # rotation_matrix_1 = np.array([
+                #     [1,  0,  0],
+                #     [0, -1,  0],
+                #     [0,  0, -1]
+                # ])
+                # extrinsic_matrix = camera_parameters.extrinsic
+                # extrinsic_matrix = np.copy(extrinsic_matrix)
+
+                # extrinsic_matrix[:3, :3] = rotation_matrix_1 @ extrinsic_matrix[:3, :3]  # Apply the rotation to the rotation part
+                # camera_parameters.extrinsic = extrinsic_matrix
+                # view_control.convert_from_pinhole_camera_parameters(camera_parameters)
+
+
+
                 view_control_1 = self.vis.get_view_control()
                 camera_parameters_1 = view_control_1.convert_to_pinhole_camera_parameters()
                 if(np.size(vertices_of_interest)>0):
@@ -1811,6 +1879,14 @@ class PointCloudUpdater:
                 average_point = (centroid+position_tracker)/2
                 lookat = average_point
                 view_control_1.set_lookat(lookat)
+
+                
+
+                
+
+                
+
+                
             
 
 
@@ -1828,6 +1904,26 @@ class PointCloudUpdater:
 
 
         if(self.registered_ct ==1):
+
+
+
+                # view_control = self.vis.get_view_control()
+                # camera_parameters = view_control.convert_to_pinhole_camera_parameters()
+
+        
+                # rotation_matrix_1 = np.array([
+                #     [1,  0,  0],
+                #     [0, -1,  0],
+                #     [0,  0, -1]
+                # ])
+                # extrinsic_matrix = camera_parameters.extrinsic
+                # extrinsic_matrix = np.copy(extrinsic_matrix)
+
+                # extrinsic_matrix[:3, :3] = rotation_matrix_1 @ extrinsic_matrix[:3, :3]  # Apply the rotation to the rotation part
+                # camera_parameters.extrinsic = extrinsic_matrix
+                # view_control.convert_from_pinhole_camera_parameters(camera_parameters)
+
+
                 view_control_1 = self.vis.get_view_control()
                 camera_parameters_1 = view_control_1.convert_to_pinhole_camera_parameters()
                 
@@ -1835,9 +1931,63 @@ class PointCloudUpdater:
                 centroid = np.mean(points, axis=0) 
 
                 position_tracker = TW_EM[:3,3]
-                average_point = (centroid+position_tracker)/2
+                average_point = ((centroid/4)+(3*position_tracker/4))
                 lookat = average_point
+
+
                 view_control_1.set_lookat(lookat)
+
+                
+                # Define the up direction explicitly (same as before)
+                up = np.array([0, -1, 0])
+
+                # what is the up axis of the vessel - flip this depending on side of table
+                
+                
+                # view_control_1.set_up(up)
+
+                # view_control_1.set_front([0,0,-1])
+
+               
+
+                
+
+      
+
+                # # Extract current camera position from extrinsic matrix
+                # current_eye = camera_parameters_1.extrinsic[:3, 3]
+                # current_eye = np.asarray([current_eye[0],current_eye[1],-current_eye[2]])
+                # full_matrix = camera_parameters_1.extrinsic
+                # rotation_matrix = copy(full_matrix)
+                # rotation_matrix[:3, 3] = copy(current_eye)
+                # camera_parameters_1.extrinsic = rotation_matrix
+
+                # # Compute new eye position by reflecting across the lookat point
+                # new_eye = 2 * lookat - current_eye
+
+                
+
+                # # Compute the forward, right, and up vectors
+                # forward = (lookat - new_eye)
+                # forward /= np.linalg.norm(forward)
+                # right = np.cross(forward, up)
+                # right /= np.linalg.norm(right)
+                # # up = np.cross(right, forward)
+
+                # # Construct the new extrinsic matrix
+                # rotation_matrix = np.eye(4)
+                # rotation_matrix[:3, 0] = right
+                # rotation_matrix[:3, 1] = up
+                # rotation_matrix[:3, 2] = -forward  # Open3D uses right-handed coordinate system
+                # rotation_matrix[:3, 3] = new_eye
+
+                # # Apply to the extrinsic matrix
+                # camera_parameters_1.extrinsic = rotation_matrix
+
+                
+
+                # Update the camera parameters
+                # view_control_1.convert_from_pinhole_camera_parameters(camera_parameters_1)
 
 
                
@@ -1887,6 +2037,7 @@ class PointCloudUpdater:
                 orifice_center_points.colors = o3d.utility.Vector3dVector(duplicated_pass_colors)
 
                 if(self.extend==1):
+                   
                     self.orifice_center_point_cloud.points.extend(orifice_center_points.points)
                     self.orifice_center_point_cloud.colors.extend(orifice_center_points.colors)
                 else:

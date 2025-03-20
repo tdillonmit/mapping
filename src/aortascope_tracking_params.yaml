@@ -7,7 +7,9 @@ savepath : user_has_not_defined
 gating : 0
 
 # record or just visualize data?
-record : 1
+
+# only use this if you want to record ivus images during ARAP deformation
+record : 0
 record_poses: 1
 
 # healthy first return manual segmentation
@@ -19,7 +21,7 @@ model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_traine
 # model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/combined_dataset/weights.h5
 
 # mapping visualization parameters
-vpC_map: 0
+vpC_map: 1 #turn on for live deformation
 bpC_map: 0
 extend: 0
 tsdf_map: 0
@@ -32,6 +34,8 @@ dissection_track: 0
 registered_ct : 1
 registered_ct_dataset: user_has_not_defined
 live_deformation: 0
+
+double_display: 1
 
 
 
