@@ -8,6 +8,7 @@ from std_msgs.msg import Int32
 import run_normalizedSpace
 import concurrent.futures
 from deformation_helpers import *
+from gating_helpers import *
 sys.path.append("/home/tdillon/FUNSR")
 
 def close_gui():
@@ -98,8 +99,25 @@ def call_register():
     rospy.set_param('registration_done', 1)
     root.update_idletasks()
  
+def call_gating():
+
+    rospy.set_param("gate", 1)
+    time.sleep(1)
+    #complete this function
+    dataset = rospy.get_param('dataset', 0)
+    if(dataset ==0):
+        select_folder()
+    dataset = rospy.get_param('dataset', 0)
+
+    run_gating(dataset)
+    root.percent.config(text = "Gating Complete")
+    root.update_idletasks()
     
-    
+def call_replay():
+    rospy.set_param("replay", 1)
+    root.percent.config(text = "Replaying Dataset")
+    root.update_idletasks()
+    time.sleep(0.5)
     
 
 
@@ -115,10 +133,10 @@ def switch_vessel():
 
 
 # only necessary because two functions access the same variable (i.e., pullback)
-def update_parameters(event=None):
+# def update_parameters(event=None):
 
-    # Update the parameters (you may want to add additional logic or error handling)
-    rospy.set_param("pullback", pullback.get())
+#     # Update the parameters (you may want to add additional logic or error handling)
+#     rospy.set_param("pullback", pullback.get())
 
 def on_closing():
     root.quit()
@@ -131,24 +149,31 @@ def start_pullback():
     Set the pullback state to 1 (start).
     """
     
-    # rospy.set_param("pullback", 1)
+    rospy.set_param("pullback", 1)
+    root.percent.config(text = "Calibrating ECG signal")
+    root.update_idletasks()
+    time.sleep(6)
+    root.percent.config(text = "Starting Pullback")
+    root.update_idletasks()
     # pullback_check = rospy.get_param("pullback", 0)
     # print("pullback STARTED")
     # print("pullback check", pullback_check)
 
-    pullback_pub.publish(1)
+    # pullback_pub.publish(1)
 
 def stop_pullback():
     """
     Set the pullback state to 0 (stop).
     """
 
-    # rospy.set_param("pullback", 0)
+    rospy.set_param("pullback", 0)
+    root.percent.config(text = "Stopping Pullback")
+    root.update_idletasks()
     # pullback_check = rospy.get_param("pullback", 0)
     # print("pullback STOPPED")
     # print("pullback check", pullback_check)
 
-    pullback_pub.publish(0)
+    # pullback_pub.publish(0)
 
 # def update_progress(progress_bar, percent, value, root):
 #         value = rospy.get_param('funsr_percent', 0)
@@ -173,12 +198,12 @@ def quit_aortascope():
 try:
 
 
-    pullback_pub = rospy.Publisher('/pullback', Int32, queue_size=1)
+    # pullback_pub = rospy.Publisher('/pullback', Int32, queue_size=1)
 
     # Initialize rospy without creating a node
     rospy.init_node('mapping_parameters_gui', anonymous=True)
 
-    pullback_pub.publish(0)
+    # pullback_pub.publish(0)
 
     # Create the GUI window
     root = Tk()
@@ -211,7 +236,7 @@ try:
  
 
     # pullback start / stop
-    pullback = IntVar(value=0)  # 0 = stopped, 1 = started
+    # pullback = IntVar(value=0)  # 0 = stopped, 1 = started
 
     # Add buttons to start and stop pullback
 
@@ -246,14 +271,20 @@ try:
     stop_button = Button(root, text="Stop Pullback Device", font=button_font, width=button_width, height=button_height, command=stop_pullback)
     stop_button.grid(row=4, column=0, padx=padding_x, pady=padding_y)
 
-    save_data_button = Button(root, text="Finish Recording", font=button_font, width=button_width, height=button_height, command=save_data)
+    save_data_button = Button(root, text="Save Data", font=button_font, width=button_width, height=button_height, command=save_data)
     save_data_button.grid(row=5, column=0, padx=padding_x, pady=padding_y)
 
     # Additional buttons
-    funsr_button = Button(root, text="Initialize Registration", font=button_font, width=button_width, height=button_height, command = call_funsr)
+    # funsr_button = Button(root, text="Initialize Registration", font=button_font, width=button_width, height=button_height, command = call_funsr)
+    # funsr_button.grid(row=6, column=0, padx=padding_x, pady=padding_y)
+
+    # load_button = Button(root, text="Load Previous Initialization", font=button_font, width=button_width, height=button_height, command = load_previous_surface_geometry)
+    # load_button.grid(row=7, column=0, padx=padding_x, pady=padding_y)
+
+    funsr_button = Button(root, text="Perform Gating", font=button_font, width=button_width, height=button_height, command = call_gating)
     funsr_button.grid(row=6, column=0, padx=padding_x, pady=padding_y)
 
-    load_button = Button(root, text="Load Previous Initialization", font=button_font, width=button_width, height=button_height, command = load_previous_surface_geometry)
+    load_button = Button(root, text="Replay Dataset", font=button_font, width=button_width, height=button_height, command = call_replay)
     load_button.grid(row=7, column=0, padx=padding_x, pady=padding_y)
 
     register_button = Button(root, text="Register Preoperative Scan", font=button_font, width=button_width, height=button_height, command = call_register)

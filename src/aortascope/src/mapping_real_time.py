@@ -512,6 +512,104 @@ class PointCloudUpdater:
 
     # these should only load / save geometries, change the visualizer, and change pointcloudupdater properties
 
+    def gate_data(self):
+
+        # change directory to gated folder
+        self.write_folder = self.write_folder + '/gated'
+        create_folder(self.write_folder )
+        
+        print("new folder after gating is:", self.write_folder )
+        
+
+
+    def replay(self):
+
+
+        rospy.set_param('replay', 0)
+        # clear view of any geometries
+        try:
+            self.vis.remove_geometry(self.processed_centreline)
+        except:
+            print("processed centreline")
+
+        try:
+            self.vis.remove_geometry(self.us_frame)
+        except:
+            print("no us frame present")
+
+        try:
+            self.vis.remove_geometry(self.mesh_near_lumen)
+        except:
+            print("no near lumen present")
+
+        try:
+            self.vis.remove_geometry(self.volumetric_near_point_cloud)
+        except:
+            print("no volumetric near point cloud present")
+
+        try:
+            self.vis.remove_geometry(self.volumetric_far_point_cloud)
+        except:
+            print("no volumetric far point cloud present")
+
+
+        
+        self.record=0
+        self.extend=1
+        self.write_folder = rospy.get_param('dataset',0)
+
+        if(self.write_folder ==0):
+            self.write_folder = self.prompt_for_folder()
+            
+        while(self.write_folder ==None):
+            self.write_folder = self.prompt_for_folder()
+
+        # for post processing of tracking data
+        folder_path = self.write_folder + '/pose_data'
+        create_folder(folder_path)
+
+        # load the images from the specified paths
+        image_path = self.write_folder + '/grayscale_images/*.npy'
+        sorted_images=sort_folder_string(image_path, "grayscale_image_")
+        grayscale_images=load_numpy_data_from_folder(sorted_images)
+
+        transform_path = self.write_folder + '/transform_data/*.npy'
+        sorted_transforms=sort_folder_string(transform_path, "TW_EM_")
+        em_transforms=load_numpy_data_from_folder(sorted_transforms)
+
+        print("number of loaded images:", len(grayscale_images))
+
+
+        starting_index=0
+        ending_index=len(em_transforms)-1
+
+        # if(self.centre_data == 1):
+        #     average_transform = get_transform_data_center(em_transforms)
+
+        for i in np.arange(starting_index,ending_index):
+
+            print(f"image index: {i}")
+
+            grayscale_image=grayscale_images[i]
+            TW_EM=em_transforms[i] 
+            # TW_EM = np.eye(4)  # if you want to visualize only the image data
+
+            # if(self.centre_data == 1):
+            #     TW_EM =  average_transform @ em_transforms[i]
+
+            # grayscale_image = cv2.cvtColor(grayscale_image, cv2.COLOR_GRAY2BGR) 
+
+            # grayscale_image=preprocess_ivus_image(grayscale_image, pc_updater.box_crop, pc_updater.circle_crop, pc_updater.text_crop, pc_updater.crosshairs_crop)
+
+            try:
+                # pc_updater.image_callback(grayscale_image, TW_EM, i, model, dataset_name, gating, bin_number, pC_map, esdf_map, tsdf_map, killingfusion_save, dissection_parameterize, esdf_smoothing, certainty_coloring, vpC_map)
+                self.append_image_transform_pair(TW_EM, grayscale_image)
+
+            except KeyboardInterrupt:
+                print("Ctrl+C detected, stopping visualizer...")
+                self.stop()  #fake function that throws an exception
+
+
 
 
     def start_recording(self):
@@ -854,7 +952,7 @@ class PointCloudUpdater:
         except:
             print("no volumetric far point cloud present")
         
-        
+       
 
   
         self.volumetric_far_point_cloud = o3d.geometry.PointCloud() 
@@ -1109,18 +1207,18 @@ class PointCloudUpdater:
         grayscale_image=preprocess_ivus_image(rgb_image,self.box_crop,self.circle_crop,self.text_crop,self.crosshairs_crop)
 
         # test image
-        # if(np.all(grayscale_image) == 0):
-        #     rgb_image = rgb_image.copy()
-        #     center = (self.centre_x, self.centre_y)  # (x, y) coordinates of the circle center
-        #     radius = int(self.centre_x/2)  # Radius of the circle
-        #     color = (255)  # White color in BGR format
-        #     thickness = 5  # -1 to fill the circle, >0 for border thickness
-        #     cv2.circle(grayscale_image, center, radius, color, thickness)
-        #     # cv2.imshow("test image", grayscale_image)
+        if(np.all(grayscale_image) == 0):
+            rgb_image = rgb_image.copy()
+            center = (self.centre_x, self.centre_y)  # (x, y) coordinates of the circle center
+            radius = int(self.centre_x/2)  # Radius of the circle
+            color = (255)  # White color in BGR format
+            thickness = 5  # -1 to fill the circle, >0 for border thickness
+            cv2.circle(grayscale_image, center, radius, color, thickness)
+            # cv2.imshow("test image", grayscale_image)
             
 
         # original_image = copy.deepcopy(grayscale_image)
-        original_image = grayscale_image.copy()
+        
         end_time = time.time()
         diff_time = end_time - start_time 
  
@@ -1170,6 +1268,11 @@ class PointCloudUpdater:
         if(self.tsdf_map != 1 and self.vpC_map != 1 and self.bpC_map!=1):
             pass
 
+        self.append_image_transform_pair(TW_EM, grayscale_image)
+
+    def append_image_transform_pair(self, TW_EM, grayscale_image):
+
+        original_image = grayscale_image.copy()
         
 
         # fetch rospy parameters for real time mapping (could be placed in initialization)
@@ -1189,12 +1292,24 @@ class PointCloudUpdater:
             self.start_recording()
             rospy.set_param('start_record', 0)
 
+            
+
         
 
         save_dataset = rospy.get_param('save_data', 0 )
         if(save_dataset ==1):
             self.save_image_and_transform_data()
             rospy.set_param('save_data', 0)
+
+        gate_button = rospy.get_param('gate', 0 )
+        if(gate_button ==1):
+            self.gate_data()
+            rospy.set_param('gate', 0)
+
+        replay_data = rospy.get_param('replay', 0 )
+        if(replay_data ==1):
+            self.replay()
+            rospy.set_param('replay', 0)
 
         funsr_start = rospy.get_param('funsr_started', 0)
         if(funsr_start == 1):
@@ -1283,24 +1398,27 @@ class PointCloudUpdater:
             mask_2_contour,hier = cv2.findContours(mask_2, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
            
-            # color_image = cv2.resize(color_image, (224, 224))
+         
 
+            # original_image = cv2.cvtColor(original_image, cv2.COLOR_GRAY2BGR)
+            # cv2.drawContours(original_image, [ellipse_contour], -1, (0, 0, 255), thickness = 1)
             # header = Header(stamp=msg.header.stamp, frame_id=msg.header.frame_id)
             # rgb_image_msg = Image(
             #     header=header,
-            #     height=224,
-            #     width=224,
+            #     height=np.shape(original_image)[0],
+            #     width=np.shape(original_image)[1],
             #     encoding='rgb8',
             #     is_bigendian=False,
-            #     step=self.new_width * 3,
-            #     data=color_image.tobytes()
+            #     step=np.shape(original_image)[1] * 3,
+            #     data=original_image.tobytes()
             # )
+            # self.rgb_image_pub.publish(rgb_image_msg)
 
             original_image = cv2.cvtColor(original_image, cv2.COLOR_GRAY2BGR)
             cv2.drawContours(original_image, [ellipse_contour], -1, (0, 0, 255), thickness = 1)
-            header = Header(stamp=msg.header.stamp, frame_id=msg.header.frame_id)
+       
             rgb_image_msg = Image(
-                header=header,
+              
                 height=np.shape(original_image)[0],
                 width=np.shape(original_image)[1],
                 encoding='rgb8',
@@ -1527,9 +1645,9 @@ class PointCloudUpdater:
             mask_2_contour_send,hier = cv2.findContours(mask_2_send, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             cv2.drawContours(original_image, mask_1_contour_send, -1, (0, 0, 255), thickness=2)
             cv2.drawContours(original_image, mask_2_contour_send, -1, (255, 0, 0), thickness=2)
-            header = Header(stamp=msg.header.stamp, frame_id=msg.header.frame_id)
+            # header = Header(stamp=msg.header.stamp, frame_id=msg.header.frame_id)
             rgb_image_msg = Image(
-                header=header,
+                # header=header,
                 height=np.shape(original_image)[0],
                 width=np.shape(original_image)[1],
                 encoding='rgb8',
