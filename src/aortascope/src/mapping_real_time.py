@@ -369,6 +369,8 @@ class PointCloudUpdater:
         self.image_sub = rospy.Subscriber('/usb_cam/image_raw', Image, self.image_callback)
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
+
+        
        
 
         if(self.gating ==1):
@@ -392,6 +394,71 @@ class PointCloudUpdater:
 
         view_control_1.set_front([0,0,-1])
 
+
+        # block the callback of data once replay has started
+        self.replay_data = 0
+
+
+        # FRAME GRABBER AND EM SIMULATOR
+        if self.test_image == 1:
+            rospy.loginfo("Test image mode active — starting mock publisher.")
+            self.test_image_pub = rospy.Publisher('/usb_cam/image_raw', Image, queue_size=1)
+
+
+            # optionally simulate position also so you can just launch aortascope, publish just once
+            if self.test_transform == 1:
+
+                self.static_broadcaster = tf2_ros.TransformBroadcaster()
+                t = TransformStamped()
+                t.header.stamp = rospy.Time.now()
+                t.header.frame_id = "ascension_origin"   # ref_frame
+                t.child_frame_id = self.dest_frame       # dest_frame (e.g., 'target1')
+
+                # Identity transform
+                t.transform.translation.x = 0.0
+                t.transform.translation.y = 0.0
+                t.transform.translation.z = 0.0
+                t.transform.rotation.x = 0.0
+                t.transform.rotation.y = 0.0
+                t.transform.rotation.z = 0.0
+                t.transform.rotation.w = 1.0
+
+                self.static_broadcaster.sendTransform(t)
+
+
+            # doing this instead of rospy spin
+            while True:
+              
+                t.header.stamp = rospy.Time.now()
+                self.static_broadcaster.sendTransform(t)
+                rgb_image = np.zeros((self.image_height, self.image_width, 3), dtype=np.uint8)
+                rgb_image = rgb_image.copy()
+                center = (self.centre_x, self.centre_y)  # (x, y) coordinates of the circle center
+                radius = int(self.centre_x/2)  # Radius of the circle
+                color = (255, 255, 255)  # White color in BGR format
+                thickness = 5  # -1 to fill the circle, >0 for border thickness
+                cv2.circle(rgb_image, center, radius, color, thickness)
+        
+
+                msg = Image()
+                msg.header.stamp = rospy.Time.now()
+                msg.height = rgb_image.shape[0]
+                msg.width = rgb_image.shape[1]
+                msg.encoding = 'rgb8'
+                msg.is_bigendian = False
+                msg.step = rgb_image.shape[1] * 3
+                msg.data = rgb_image.tobytes()
+
+                self.test_image_pub.publish(msg)
+                time.sleep(0.015)
+
+     
+
+    
+
+
+        
+
         
 
     def initialize_deeplumen_model(self):
@@ -405,13 +472,15 @@ class PointCloudUpdater:
             
             model = tf.keras.Model(inputs=DRN_inputs_3, outputs=DRN_outputs_3)
 
+            model.summary()
+
             
             # sub branch segmentation
             model.load_weights( self.model_path)  
 
 
         
-            model.summary()
+            # model.summary()
 
             # this makes compilation 20x faster!!
             model = tf.function(model, jit_compile=True)
@@ -465,6 +534,10 @@ class PointCloudUpdater:
         self.live_deformation = config_yaml['live_deformation']
 
         self.double_display = config_yaml['double_display']
+
+        self.test_image = config_yaml['test_image']
+
+        self.test_transform = config_yaml['test_transform']
 
         # ---- LOAD ROS PARAMETERS ------ #
         param_names = ['/angle', '/translation','/scaling','/threshold','/no_points','/crop_index','/radial_offset','/oclock', '/constraint_radius','/pullback']
@@ -524,6 +597,9 @@ class PointCloudUpdater:
 
     def replay(self):
 
+        self.test_image = 0
+        self.test_transform = 0
+
 
         rospy.set_param('replay', 0)
         # clear view of any geometries
@@ -575,7 +651,7 @@ class PointCloudUpdater:
 
         transform_path = self.write_folder + '/transform_data/*.npy'
         sorted_transforms=sort_folder_string(transform_path, "TW_EM_")
-        em_transforms=load_numpy_data_from_folder(sorted_transforms)
+        em_transforms=load_transform_data_from_folder(sorted_transforms)
 
         print("number of loaded images:", len(grayscale_images))
 
@@ -592,6 +668,11 @@ class PointCloudUpdater:
 
             grayscale_image=grayscale_images[i]
             TW_EM=em_transforms[i] 
+            
+            # print("TW_EM:", TW_EM)
+
+           
+
             # TW_EM = np.eye(4)  # if you want to visualize only the image data
 
             # if(self.centre_data == 1):
@@ -609,7 +690,32 @@ class PointCloudUpdater:
                 print("Ctrl+C detected, stopping visualizer...")
                 self.stop()  #fake function that throws an exception
 
+        try:
+            self.vis.remove_geometry(self.processed_centreline)
+        except:
+            print("processed centreline")
 
+        try:
+            self.vis.remove_geometry(self.us_frame)
+        except:
+            print("no us frame present")
+
+        try:
+            self.vis.remove_geometry(self.mesh_near_lumen)
+        except:
+            print("no near lumen present")
+
+        try:
+            self.vis.remove_geometry(self.volumetric_near_point_cloud)
+        except:
+            print("no volumetric near point cloud present")
+
+        try:
+            self.vis.remove_geometry(self.volumetric_far_point_cloud)
+        except:
+            print("no volumetric far point cloud present")
+
+        self.extend=0
 
 
     def start_recording(self):
@@ -724,7 +830,7 @@ class PointCloudUpdater:
         self.record = 0
         
 
-        time.sleep(1)
+        # time.sleep(1)
 
         print("final save!")
 
@@ -783,6 +889,7 @@ class PointCloudUpdater:
             # Save the TW_EM data
             tw_em_filename = f'{self.write_folder}/transform_data/TW_EM_{self.starting_index + image_tag -1}.npy'
             with open(tw_em_filename, 'wb') as f:
+                TW_EM = np.array(TW_EM, dtype=np.float64).reshape(4, 4)
                 np.save(f, TW_EM)
 
 
@@ -837,6 +944,7 @@ class PointCloudUpdater:
             # tw_em_filename = f'{self.write_folder}/transform_data/TW_EM_{self.image_call + i}.npy'
             tw_em_filename = f'{self.write_folder}/transform_data/TW_EM_{self.starting_index + image_tag -1}.npy'
             with open(tw_em_filename, 'wb') as f:
+                TW_EM = np.array(TW_EM, dtype=np.float64).reshape(4, 4)
                 np.save(f, TW_EM)
 
 
@@ -1146,6 +1254,10 @@ class PointCloudUpdater:
 
     def ecg_callback(self,ecg_msg):
 
+        # if(self.replay_data==1):
+        #     # print("not called")
+        #     return
+
         current_time = rospy.get_rostime()
         ecg_timestamp_secs = current_time.secs
         ecg_timestamp_nsecs = current_time.nsecs
@@ -1160,12 +1272,27 @@ class PointCloudUpdater:
 
         
     def image_callback(self, msg):
+
+        
+
+        self.replay_data = rospy.get_param('replay', 0 )
+        if(self.replay_data ==1):
+            self.replay()
+            rospy.set_param('replay', 0)
+
+        # print("self.replay data", self.replay_data)
+        # if(self.replay_data==1):
+        #     # print("not called")
+        #     return
         
 
         start_total_time = time.time()
         # this is the shortest number of lines it takes to grab the transform once image arrives
         # transform_time = rospy.Time(0) #get the most recent transform
         transform_time = msg.header.stamp #get the most recent transform
+
+        if(self.test_transform ==1): 
+            transform_time = rospy.Time(0)
         
         # Assuming you have the frame IDs for your transform
         ref_frame = 'ascension_origin'
@@ -1180,7 +1307,7 @@ class PointCloudUpdater:
             rospy.logwarn("Failed to lookup transform")
             TW_EM = None
 
-        
+       
         TW_EM=transform_stamped_to_matrix(TW_EM)
 
         # now get the original image's timestamp
@@ -1206,15 +1333,7 @@ class PointCloudUpdater:
         start_time = time.time()
         grayscale_image=preprocess_ivus_image(rgb_image,self.box_crop,self.circle_crop,self.text_crop,self.crosshairs_crop)
 
-        # test image
-        if(np.all(grayscale_image) == 0):
-            rgb_image = rgb_image.copy()
-            center = (self.centre_x, self.centre_y)  # (x, y) coordinates of the circle center
-            radius = int(self.centre_x/2)  # Radius of the circle
-            color = (255)  # White color in BGR format
-            thickness = 5  # -1 to fill the circle, >0 for border thickness
-            cv2.circle(grayscale_image, center, radius, color, thickness)
-            # cv2.imshow("test image", grayscale_image)
+        
             
 
         # original_image = copy.deepcopy(grayscale_image)
@@ -1252,7 +1371,7 @@ class PointCloudUpdater:
 
                 #clear the image batch and save the callback number
                 self.image_batch = []
-                self.tw_em_branch = []
+                self.tw_em_batch = []
                 self.image_tags = []
                 self.image_number = 1
                 
@@ -1271,6 +1390,8 @@ class PointCloudUpdater:
         self.append_image_transform_pair(TW_EM, grayscale_image)
 
     def append_image_transform_pair(self, TW_EM, grayscale_image):
+
+        # print("TW_EM:", TW_EM)
 
         original_image = grayscale_image.copy()
         
@@ -1306,10 +1427,7 @@ class PointCloudUpdater:
             self.gate_data()
             rospy.set_param('gate', 0)
 
-        replay_data = rospy.get_param('replay', 0 )
-        if(replay_data ==1):
-            self.replay()
-            rospy.set_param('replay', 0)
+        
 
         funsr_start = rospy.get_param('funsr_started', 0)
         if(funsr_start == 1):
@@ -1453,6 +1571,8 @@ class PointCloudUpdater:
 
 
             start_time = time.time()
+
+            
 
             # mask_1, mask_2 = deeplumen_segmentation(image,self.model)
             pred= deeplumen_segmentation(image,self.model)
