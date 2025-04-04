@@ -1126,6 +1126,12 @@ class PointCloudUpdater:
                 e2 = np.linalg.norm(v2 - v0, axis=1)
                 avg_edge_length = np.mean(np.concatenate([e0, e1, e2]))
 
+            print("subdivision complete, computing coarse to fine mapping!")
+            self.knn_idxs, self.knn_weights = precompute_knn_mapping(self.registered_ct_mesh, self.registered_ct_mesh_2, k=5)
+            self.coarse_template_vertices = copy.deepcopy(np.asarray(self.registered_ct_mesh.vertices))
+            self.fine_template_vertices = copy.deepcopy(np.asarray(self.registered_ct_mesh_2.vertices))
+            # visualize_knn_mapping(self.registered_ct_mesh_2, self.registered_ct_mesh, self.knn_idxs, sample_indices=[0, 50, 100])
+            print("computed coarse to fine mesh node mapping")
 
             ct_centroid_pc = o3d.io.read_point_cloud(self.write_folder + '/side_branch_centrelines.ply')
             self.constraint_locations = np.asarray(ct_centroid_pc.points)
@@ -1970,21 +1976,25 @@ class PointCloudUpdater:
                     #  coordinate_frame.transform(TW_EM @ TEM_C)
                     #  o3d.visualization.draw_geometries([self.registered_ct_mesh, self.centerline_pc, coordinate_frame, near_pC_points])
 
-                     try:
+                    #  try:
                         
-                        deformed_mesh = live_deform(self.registered_ct_mesh, self.constraint_indices, self.centerline_pc, TW_EM @ TEM_C, near_vpC_points )
-                        temp_lineset = create_wireframe_lineset_from_mesh(deformed_mesh)
-                        self.registered_ct_lineset.points = temp_lineset.points
-                        self.registered_ct_lineset.lines = temp_lineset.lines
-                        self.vis.update_geometry(self.registered_ct_lineset)
+                    deformed_mesh = live_deform(self.registered_ct_mesh, self.constraint_indices, self.centerline_pc, TW_EM @ TEM_C, near_vpC_points )
+                    temp_lineset = create_wireframe_lineset_from_mesh(deformed_mesh)
+                    self.registered_ct_lineset.points = temp_lineset.points
+                    self.registered_ct_lineset.lines = temp_lineset.lines
+                    self.vis.update_geometry(self.registered_ct_lineset)
 
-                        self.registered_ct_mesh_2.vertices = deformed_mesh.vertices
-                        self.registered_ct_mesh_2.compute_vertex_normals()
-                        self.vis2.update_geometry(self.registered_ct_mesh_2)
+                    # mapping from coarse deformed mesh to fine deformed mesh nodes for endoscopic view
+                    fine_deformed_vertices = deform_fine_mesh_using_knn(self.registered_ct_mesh, deformed_mesh, self.registered_ct_mesh_2, self.knn_idxs, self.knn_weights, self.coarse_template_vertices, self.fine_template_vertices)
+
+                    # self.registered_ct_mesh_2.vertices = deformed_mesh.vertices
+                    self.registered_ct_mesh_2.vertices = o3d.utility.Vector3dVector(fine_deformed_vertices)
+                    self.registered_ct_mesh_2.compute_vertex_normals()
+                    self.vis2.update_geometry(self.registered_ct_mesh_2)
                        
-                     except:
-                        print("IVUS live mesh deformation not working")
-                        pass
+                    #  except:
+                    #     print("IVUS live mesh deformation not working")
+                    #     pass
 
                 # EM BASED DEFORMATION
                 if(self.live_deformation == 1 and self.registered_ct == 1 and self.dest_frame == 'target2'):
@@ -1999,12 +2009,17 @@ class PointCloudUpdater:
                     if(signed_distance_np[0] > 0):
                         try:
                             deformed_mesh = live_deform(self.registered_ct_mesh, self.constraint_indices, self.centerline_pc, TW_EM @ TEM_C, near_vpC_points, self.dest_frame )
+                            
                             temp_lineset = create_wireframe_lineset_from_mesh(deformed_mesh)
                             self.registered_ct_lineset.points = temp_lineset.points
                             self.registered_ct_lineset.lines = temp_lineset.lines
                             self.vis.update_geometry(self.registered_ct_lineset)
 
-                            self.registered_ct_mesh_2.vertices = deformed_mesh.vertices
+                            # mapping from coarse deformed mesh to fine deformed mesh nodes for endoscopic view
+                            fine_deformed_vertices = deform_fine_mesh_using_knn(self.registered_ct_mesh, deformed_mesh, self.registered_ct_mesh_2, self.knn_idxs, self.knn_weights, self.coarse_template_vertices, self.fine_template_vertices)
+
+                            # self.registered_ct_mesh_2.vertices = deformed_mesh.vertices
+                            self.registered_ct_mesh_2.vertices = o3d.utility.Vector3dVector(fine_deformed_vertices)
                             self.registered_ct_mesh_2.compute_vertex_normals()
                             self.vis2.update_geometry(self.registered_ct_mesh_2)
                         except:

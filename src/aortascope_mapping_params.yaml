@@ -31,7 +31,7 @@ orifice_center_map: 1
 # non rigid icp registered ct scan for tracking
 registered_ct : 0
 registered_ct_dataset: user_has_not_defined
-live_deformation: 0
+live_deformation: 1
 
 double_display: 1
 test_image: 0
