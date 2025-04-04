@@ -36,6 +36,8 @@ registered_ct_dataset: user_has_not_defined
 live_deformation: 0
 
 double_display: 1
+test_image: 0
+test_transform: 0
 
 
 

@@ -429,8 +429,10 @@ class PointCloudUpdater:
             # doing this instead of rospy spin
             while True:
               
-                t.header.stamp = rospy.Time.now()
-                self.static_broadcaster.sendTransform(t)
+                if self.test_transform == 1:
+                    t.header.stamp = rospy.Time.now()
+                    self.static_broadcaster.sendTransform(t)
+
                 rgb_image = np.zeros((self.image_height, self.image_width, 3), dtype=np.uint8)
                 rgb_image = rgb_image.copy()
                 center = (self.centre_x, self.centre_y)  # (x, y) coordinates of the circle center
@@ -568,12 +570,12 @@ class PointCloudUpdater:
 
         
         with open('/home/tdillon/mapping/src/calibration_parameters_ivus.yaml', 'r') as file:
-            calib_yaml = yaml.safe_load(file)
+            self.calib_yaml = yaml.safe_load(file)
 
-        self.angle = calib_yaml['/angle']
-        self.translation = calib_yaml['/translation']
-        self.radial_offset = calib_yaml['/radial_offset']
-        self.o_clock = calib_yaml['/oclock']
+        self.angle = self.calib_yaml['/angle']
+        self.translation = self.calib_yaml['/translation']
+        self.radial_offset = self.calib_yaml['/radial_offset']
+        self.o_clock = self.calib_yaml['/oclock']
 
 
 
@@ -720,6 +722,10 @@ class PointCloudUpdater:
 
     def start_recording(self):
 
+        new_path = self.write_folder + '/calibration_parameters_ivus.yaml'
+        with open(new_path, 'w') as file:
+            yaml.dump(self.calib_yaml, file)
+
         # self.deeplumen_on = 1
 
         # turn on extend
@@ -756,6 +762,8 @@ class PointCloudUpdater:
 
             folder_path = self.write_folder + '/ecg_signal'
             create_folder(folder_path)
+
+        
 
         print("creating folders!")
 
@@ -1100,7 +1108,23 @@ class PointCloudUpdater:
             self.registered_ct_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/final_registration_mesh.ply')
             self.registered_ct_mesh.remove_unreferenced_vertices()
 
-            self.registered_ct_mesh_2 = self.registered_ct_mesh.subdivide_loop(number_of_iterations=2)
+            self.registered_ct_mesh_2 = copy.deepcopy(self.registered_ct_mesh)
+
+            avg_edge_length = 999
+            desired_edge_length = 0.002
+
+            while avg_edge_length > desired_edge_length:
+                self.registered_ct_mesh_2 = self.registered_ct_mesh_2.subdivide_loop(number_of_iterations=1)
+                
+                vertices = np.asarray(self.registered_ct_mesh_2.vertices)
+                triangles = np.asarray(self.registered_ct_mesh_2.triangles)
+                v0 = vertices[triangles[:, 0]]
+                v1 = vertices[triangles[:, 1]]
+                v2 = vertices[triangles[:, 2]]
+                e0 = np.linalg.norm(v0 - v1, axis=1)
+                e1 = np.linalg.norm(v1 - v2, axis=1)
+                e2 = np.linalg.norm(v2 - v0, axis=1)
+                avg_edge_length = np.mean(np.concatenate([e0, e1, e2]))
 
 
             ct_centroid_pc = o3d.io.read_point_cloud(self.write_folder + '/side_branch_centrelines.ply')
@@ -1119,7 +1143,7 @@ class PointCloudUpdater:
 
             self.registered_ct_lineset.paint_uniform_color([0,0,0])
 
-            self.registered_ct_mesh_2 = copy.deepcopy(self.registered_ct_mesh)
+            # self.registered_ct_mesh_2 = copy.deepcopy(self.registered_ct_mesh)
             
             self.registered_ct_mesh_2.compute_vertex_normals()
 
@@ -1325,6 +1349,15 @@ class PointCloudUpdater:
         
 
         rgb_image = rgb_image_data.reshape((self.image_height, self.image_width, 3))
+
+
+        # TEST IMAGE test_image
+        rgb_image = np.zeros((self.image_height, self.image_width, 3), dtype=np.uint8)
+        center = (self.centre_x, self.centre_y)  # (x, y) coordinates of the circle center
+        radius = int(self.centre_x/2)  # Radius of the circle
+        color = (255, 255, 255)  # White color in BGR format
+        thickness = 5  # -1 to fill the circle, >0 for border thickness
+        cv2.circle(rgb_image, center, radius, color, thickness)
 
        
         
