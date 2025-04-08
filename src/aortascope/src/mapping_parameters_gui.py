@@ -228,6 +228,13 @@ def quit_aortascope():
     rospy.set_param('shutdown', 1)
     time.sleep(0.3)
     rospy.signal_shutdown('User quitted')
+
+def sim_device_deployment():
+ 
+    print("simulating device deployment (gui)")
+    rospy.set_param('sim_device', 1)
+    time.sleep(1)
+
     
     
  
@@ -346,17 +353,23 @@ try:
     refine_stop_button = Button(root, text="Refine Abdominal Registration (Stop)", font=button_font, width=button_width, height=button_height, command = save_refine)
     refine_stop_button.grid(row=12, column=0, padx=padding_x, pady=padding_y)
 
-    quit_button = Button(root, text="Quit Application", font=button_font, width=button_width, height=button_height, command = quit_aortascope)
-    quit_button.grid(row=13, column=0, padx=padding_x, pady=padding_y)
+    # quit_button = Button(root, text="Quit Application", font=button_font, width=button_width, height=button_height, command = quit_aortascope)
+    # quit_button.grid(row=13, column=0, padx=padding_x, pady=padding_y)
 
-    root.percent = Label(root, text="", font=("Arial", 10))
-    root.percent.grid(row=14, column=0)
+    sim_device = Button(root, text="Simulate Device Deployment", font=button_font, width=button_width, height=button_height, command = sim_device_deployment)
+    sim_device.grid(row=13, column=0, padx=padding_x, pady=padding_y)
 
-    root.progress_bar = ttk.Progressbar(root, orient="horizontal", length=(500* display_scale_factor), mode="determinate", 
-                                style="TProgressbar")
-    root.progress_bar.grid(row=14, column=0, padx=padding_x, pady=padding_y*0.6)
-    style = ttk.Style()
-    style.configure("TProgressbar", thickness=int(15 * display_scale_factor))  # Increase the thickness of the progress bar
+
+    # PROGRESS BAR AND PERCENTAGE
+    
+    # root.percent = Label(root, text="", font=("Arial", 10))
+    # root.percent.grid(row=14, column=0)
+
+    # root.progress_bar = ttk.Progressbar(root, orient="horizontal", length=(500* display_scale_factor), mode="determinate", 
+    #                             style="TProgressbar")
+    # root.progress_bar.grid(row=14, column=0, padx=padding_x, pady=padding_y*0.6)
+    # style = ttk.Style()
+    # style.configure("TProgressbar", thickness=int(15 * display_scale_factor))  # Increase the thickness of the progress bar
 
     
     # self.update_progress(progress_bar, percent, percentage_complete, root)

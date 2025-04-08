@@ -402,6 +402,10 @@ class PointCloudUpdater:
 
         self.orifice_center_spheres = o3d.geometry.TriangleMesh()
 
+        # device deployment simulation
+        self.evar_slide_sim = 0
+        self.tavr_sim = 0
+
 
         # block the callback of data once replay has started
         self.replay_data = 0
@@ -1156,6 +1160,13 @@ class PointCloudUpdater:
             self.registered_ct_lineset = o3d.io.read_line_set(self.write_folder+ '' + '/final_registration.ply')
             print("loading registration mesh")
             self.registered_ct_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/final_registration_mesh.ply')
+
+            if(self.refine==1):
+                self.registered_ct_lineset = o3d.io.read_line_set(self.write_folder+ '' + '/final_registration_refine.ply')
+                print("loading registration mesh")
+                self.registered_ct_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/final_registration_mesh_refine.ply')
+
+
             self.registered_ct_mesh.remove_unreferenced_vertices()
 
             self.registered_ct_mesh_2 = copy.deepcopy(self.registered_ct_mesh)
@@ -1184,7 +1195,11 @@ class PointCloudUpdater:
             # visualize_knn_mapping(self.registered_ct_mesh_2, self.registered_ct_mesh, self.knn_idxs, sample_indices=[0, 50, 100])
             print("computed coarse to fine mesh node mapping")
 
+
             ct_centroid_pc = o3d.io.read_point_cloud(self.write_folder + '/side_branch_centrelines.ply')
+
+            if(self.refine==1):
+                ct_centroid_pc = o3d.io.read_point_cloud(self.write_folder + '/side_branch_centrelines_refine.ply')
             self.constraint_locations = np.asarray(ct_centroid_pc.points)
             # self.ct_centroids = np.load(self.write_folder + '/ct_centroids.npy')
 
@@ -1192,8 +1207,10 @@ class PointCloudUpdater:
             self.ct_centroids = np.load(self.write_folder + '/ivus_centroids.npy')
             self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.00225, 20, [0,1,0])
             self.knn_idxs_spheres, self.knn_weights_spheres = precompute_knn_mapping(self.registered_ct_mesh, self.ct_centroids, k=5)
-            
+
             self.centerline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc.ply')
+            if(self.refine==1):
+                self.centerline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc_refine.ply')
 
             # # SMOOTHING MESH AS IMPORTED!! - not anymore
             # self.registered_ct_mesh = self.registered_ct_mesh.filter_smooth_taubin(number_of_iterations=10)
@@ -1385,11 +1402,75 @@ class PointCloudUpdater:
         print("refinement complete (check if result is reasonable)")
 
         # initialize tracking type code
+        self.refine=1
         self.tracking()
 
         self.tsdf_map = 0
-        self.refine = 0
+        # self.refine = 0 # want to call the refined centerline for device simulation
         self.extend = 0
+
+    def simulate_device(self):
+
+        # do all initialization here
+        self.evar_slide_sim = 1
+        self.tavr_sim = 0
+
+        tf.keras.backend.clear_session()
+        tf.compat.v1.reset_default_graph()
+        self.deeplumen_on = 0
+        self.extend = 0
+        self.vpC_map = 0
+        self.live_deform = 0
+        # self.refine = 0 # want to call the refined centerline
+
+        if(self.evar_slide_sim == 1):
+      
+
+            self.graft_start_idx_previous = 999
+
+            self.centreline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc.ply')
+            if(self.refine==1):
+                self.centreline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc_refine.ply')
+
+            self.centreline_pc.paint_uniform_color([0,0,0])
+            self.geodesic_centreline = compute_geodesic_distance_on_point_cloud(self.centreline_pc).squeeze()
+
+
+            self.evar_radius = 0.014
+            self.evar_length = 0.15
+            amplitude = 0.005
+            num_struts = 5
+            axial_spacing = 0.015
+            self.no_graft_points = 12
+
+            self.evar_graft = get_evar_geometry(self.evar_radius, self.evar_length, amplitude, num_struts, axial_spacing, self.no_graft_points)
+            o3d.visualization.draw_geometries([ self.evar_graft])
+            self.transformed_centreline_pc, self.evar_graft = initial_device_alignment(self.evar_graft, self.evar_length, self.no_graft_points, self.centerline_pc)
+            print('initial alignment done')
+            self.centerline_pc.paint_uniform_color([0,0,0])
+            self.transformed_centreline_pc.paint_uniform_color([1,0,1])
+            o3d.visualization.draw_geometries([ self.evar_graft, self.transformed_centreline_pc,self.centerline_pc, self.registered_ct_lineset])
+            
+            self.evar_graft = slide_device_to_pose(self.evar_graft, self.transformed_centreline_pc, self.no_graft_points, self.most_recent_extrinsic, 0.01)
+            
+            # target_spheres = get_fevar_spheres(self.centerline_pc, geodesics, radius, angles)
+            # self.evar_graft = initial_device_slide_up(self.evar_graft, self.centerline_pc, self.no_graft_points, self.transformed_centreline_pc)
+
+            self.vis.add_geometry(self.evar_graft)
+            # self.vis.add_geometry(target_spheres)
+
+         
+    
+            print("finished initial slide!")
+            o3d.visualization.draw_geometries([ self.evar_graft, self.transformed_centreline_pc,self.centerline_pc])
+            
+
+            if(self.tavr_sim == 1):
+                self.evar_graft = o3d.io.read_triangle_mesh('/home/tdillon/Downloads/sapient_stent_frame.stl')
+                # fill in rest here
+            
+
+        return
 
         
 
@@ -1668,9 +1749,15 @@ class PointCloudUpdater:
             self.call_refine_reg()
             rospy.set_param('refine_done', 0)
 
+        sim_device= rospy.get_param('sim_device', 0 )
+        if(sim_device ==1):
+            self.simulate_device()
+            rospy.set_param('sim_device',0)
+
         shutdown = rospy.get_param('shutdown', 0 )
         if(shutdown ==1):
             self.close_app()
+
 
         # stop
         
@@ -2032,6 +2119,7 @@ class PointCloudUpdater:
         TEM_C = np.asarray(TEM_C)
 
         extrinsic_matrix=TW_EM @ TEM_C
+        self.most_recent_extrinsic = extrinsic_matrix
 
         # ----- BSPLINE SMOOTHING FUNCTIONS  ----- #
         # this is early in the function so that the pose and masks get adjusted if they needs to be
@@ -2349,23 +2437,7 @@ class PointCloudUpdater:
             vertices_of_interest = np.asarray(self.mesh_near_lumen.vertices)
             if(vertices_of_interest is not None):
 
-                # set initial 3D view
-
-                # view_control = self.vis.get_view_control()
-                # camera_parameters = view_control.convert_to_pinhole_camera_parameters()
-
-        
-                # rotation_matrix_1 = np.array([
-                #     [1,  0,  0],
-                #     [0, -1,  0],
-                #     [0,  0, -1]
-                # ])
-                # extrinsic_matrix = camera_parameters.extrinsic
-                # extrinsic_matrix = np.copy(extrinsic_matrix)
-
-                # extrinsic_matrix[:3, :3] = rotation_matrix_1 @ extrinsic_matrix[:3, :3]  # Apply the rotation to the rotation part
-                # camera_parameters.extrinsic = extrinsic_matrix
-                # view_control.convert_from_pinhole_camera_parameters(camera_parameters)
+    
 
 
 
@@ -2380,41 +2452,8 @@ class PointCloudUpdater:
                 lookat = average_point
                 view_control_1.set_lookat(lookat)
 
-                
-
             
-        # if(self.vpC_map ==1):
-        #     if(self.volumetric_near_point_cloud is not None):
-        #         view_control_1 = self.vis.get_view_control()
-        #         camera_parameters_1 = view_control_1.convert_to_pinhole_camera_parameters()
-        #         points = np.asarray(self.volumetric_near_point_cloud.points)  # Convert point cloud to numpy array
-        #         centroid = np.mean(points, axis=0) 
-        #         position_tracker = TW_EM[:3,3]
-        #         average_point = (centroid+position_tracker)/2
-        #         lookat = average_point
-        #         view_control_1.set_lookat(lookat)
-
-
-
         if(self.registered_ct ==1):
-
-
-
-                # view_control = self.vis.get_view_control()
-                # camera_parameters = view_control.convert_to_pinhole_camera_parameters()
-
-        
-                # rotation_matrix_1 = np.array([
-                #     [1,  0,  0],
-                #     [0, -1,  0],
-                #     [0,  0, -1]
-                # ])
-                # extrinsic_matrix = camera_parameters.extrinsic
-                # extrinsic_matrix = np.copy(extrinsic_matrix)
-
-                # extrinsic_matrix[:3, :3] = rotation_matrix_1 @ extrinsic_matrix[:3, :3]  # Apply the rotation to the rotation part
-                # camera_parameters.extrinsic = extrinsic_matrix
-                # view_control.convert_from_pinhole_camera_parameters(camera_parameters)
 
 
                 view_control_1 = self.vis.get_view_control()
@@ -2437,70 +2476,6 @@ class PointCloudUpdater:
                 # what is the up axis of the vessel - flip this depending on side of table
                 
                 
-                # view_control_1.set_up(up)
-
-                # view_control_1.set_front([0,0,-1])
-
-               
-
-                
-
-      
-
-                # # Extract current camera position from extrinsic matrix
-                # current_eye = camera_parameters_1.extrinsic[:3, 3]
-                # current_eye = np.asarray([current_eye[0],current_eye[1],-current_eye[2]])
-                # full_matrix = camera_parameters_1.extrinsic
-                # rotation_matrix = copy(full_matrix)
-                # rotation_matrix[:3, 3] = copy(current_eye)
-                # camera_parameters_1.extrinsic = rotation_matrix
-
-                # # Compute new eye position by reflecting across the lookat point
-                # new_eye = 2 * lookat - current_eye
-
-                
-
-                # # Compute the forward, right, and up vectors
-                # forward = (lookat - new_eye)
-                # forward /= np.linalg.norm(forward)
-                # right = np.cross(forward, up)
-                # right /= np.linalg.norm(right)
-                # # up = np.cross(right, forward)
-
-                # # Construct the new extrinsic matrix
-                # rotation_matrix = np.eye(4)
-                # rotation_matrix[:3, 0] = right
-                # rotation_matrix[:3, 1] = up
-                # rotation_matrix[:3, 2] = -forward  # Open3D uses right-handed coordinate system
-                # rotation_matrix[:3, 3] = new_eye
-
-                # # Apply to the extrinsic matrix
-                # camera_parameters_1.extrinsic = rotation_matrix
-
-                
-
-                # Update the camera parameters
-                # view_control_1.convert_from_pinhole_camera_parameters(camera_parameters_1)
-
-
-               
-                # view_control = self.vis.get_view_control()
-                # camera_parameters = view_control.convert_to_pinhole_camera_parameters()
-                # camera_front = np.array(camera_parameters.extrinsic[:3, 2])  # z-axis in the extrinsic matrix
-                # rotation_matrix_1 = np.eye(3) - 2 * np.outer(camera_front, camera_front)
-                # rotation_matrix_2 = np.array([
-                #     [1, 0, 0],  # No change in x-axis
-                #     [0, -1, 0], # Flip y-axis
-                #     [0, 0, -1]  # Flip z-axis
-                # ])
-                # extrinsic_matrix = camera_parameters.extrinsic
-                # extrinsic_matrix = np.copy(extrinsic_matrix)
-                # # extrinsic_matrix[:3, :3] =  rotation_matrix_1 @ extrinsic_matrix[:3, :3] 
-                # # extrinsic_matrix[:3, :3] =  extrinsic_matrix[:3, :3] 
-                # extrinsic_matrix[:3, :3] = rotation_matrix_2 @ rotation_matrix_1 @ extrinsic_matrix[:3, :3]  # Apply the rotation to the rotation part
-                # camera_parameters.extrinsic = extrinsic_matrix
-                # view_control.convert_from_pinhole_camera_parameters(camera_parameters)
-
 
         # ---- APPEND TO ORIFICE CENTER PC ------ #
         if(self.orifice_center_map == 1 and self.deeplumen_on ==1):
@@ -2563,6 +2538,13 @@ class PointCloudUpdater:
             self.vis.update_geometry(self.orifice_center_point_cloud)  
             self.vis.update_geometry(self.orifice_center_spheres)
 
+            
+        # ----- SIMULATE DEVICE DEPLOYMENT (SLIDING) ------- #
+        if(self.evar_slide_sim):
+
+            self.evar_graft = slide_device_to_pose(self.evar_graft, self.transformed_centreline_pc, self.no_graft_points, extrinsic_matrix, 0.001)
+                
+            self.vis.update_geometry(self.evar_graft)
             
             
 
