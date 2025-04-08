@@ -98,6 +98,8 @@ def call_register():
     root.percent.config(text = "Registration Complete")
     rospy.set_param('registration_done', 1)
     root.update_idletasks()
+
+
  
 def call_gating():
 
@@ -124,6 +126,41 @@ def call_replay():
 def switch_probe():
     rospy.set_param('switch_probe', 1)
     time.sleep(1)
+
+def call_refine():
+
+    rospy.set_param("refine_started", 1)
+
+
+def save_refine():
+    
+    rospy.set_param('refine_done', 1)
+    rospy.set_param("refinement_computed", 0)
+    time.sleep(1)
+
+    
+
+    #complete this function
+    dataset = rospy.get_param('dataset', 0)
+    if(dataset ==0):
+        select_folder()
+    dataset = rospy.get_param('dataset', 0)
+
+    
+    visualize = 0
+    refine = 1
+    root.percent.config(text = "Refining Registration")
+    root.update_idletasks()
+    print("calling refine indirectly")
+    
+    
+    call_refine_indirectly(dataset, visualize, refine)
+    root.percent.config(text = "Refinement Complete")
+
+    rospy.set_param("refinement_computed", 1)
+    
+    root.update_idletasks()
+        
     
 
 def switch_vessel():
@@ -300,14 +337,20 @@ try:
     tracking_button = Button(root, text="Switch Endoscopic View", font=button_font, width=button_width, height=button_height, command =switch_probe)
     tracking_button.grid(row=10, column=0, padx=padding_x, pady=padding_y)
 
-    target_button = Button(root, text="Switch Target Vessel", font=button_font, width=button_width, height=button_height, command = switch_vessel)
-    target_button.grid(row=11, column=0, padx=padding_x, pady=padding_y)
+    # target_button = Button(root, text="Switch Target Vessel", font=button_font, width=button_width, height=button_height, command = switch_vessel)
+    # target_button.grid(row=11, column=0, padx=padding_x, pady=padding_y)
+
+    refine_button = Button(root, text="Refine Abdominal Registration (Start)", font=button_font, width=button_width, height=button_height, command = call_refine)
+    refine_button.grid(row=11, column=0, padx=padding_x, pady=padding_y)
+
+    refine_stop_button = Button(root, text="Refine Abdominal Registration (Stop)", font=button_font, width=button_width, height=button_height, command = save_refine)
+    refine_stop_button.grid(row=12, column=0, padx=padding_x, pady=padding_y)
 
     quit_button = Button(root, text="Quit Application", font=button_font, width=button_width, height=button_height, command = quit_aortascope)
-    quit_button.grid(row=12, column=0, padx=padding_x, pady=padding_y)
+    quit_button.grid(row=13, column=0, padx=padding_x, pady=padding_y)
 
     root.percent = Label(root, text="", font=("Arial", 10))
-    root.percent.grid(row=13, column=0)
+    root.percent.grid(row=14, column=0)
 
     root.progress_bar = ttk.Progressbar(root, orient="horizontal", length=(500* display_scale_factor), mode="determinate", 
                                 style="TProgressbar")
