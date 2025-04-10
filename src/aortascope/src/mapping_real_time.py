@@ -1444,14 +1444,17 @@ class PointCloudUpdater:
             self.no_graft_points = 12
 
             self.evar_graft = get_evar_geometry(self.evar_radius, self.evar_length, amplitude, num_struts, axial_spacing, self.no_graft_points)
-            o3d.visualization.draw_geometries([ self.evar_graft])
-            self.transformed_centreline_pc, self.evar_graft = initial_device_alignment(self.evar_graft, self.evar_length, self.no_graft_points, self.centerline_pc)
+        
+            self.transformed_centreline_pc, self.evar_graft = initial_device_alignment(self.evar_graft, self.evar_length, self.no_graft_points, self.centreline_pc)
             print('initial alignment done')
             self.centerline_pc.paint_uniform_color([0,0,0])
             self.transformed_centreline_pc.paint_uniform_color([1,0,1])
+
             o3d.visualization.draw_geometries([ self.evar_graft, self.transformed_centreline_pc,self.centerline_pc, self.registered_ct_lineset])
+
+            o3d.visualization.draw_geometries([self.transformed_centreline_pc, self.centerline_pc, self.registered_ct_lineset])
             
-            self.evar_graft = slide_device_to_pose(self.evar_graft, self.transformed_centreline_pc, self.no_graft_points, self.most_recent_extrinsic, 0.01)
+            self.evar_graft = slide_device_to_pose(self.evar_graft, self.transformed_centreline_pc, self.no_graft_points, self.most_recent_extrinsic, 0.001)
             
             # target_spheres = get_fevar_spheres(self.centerline_pc, geodesics, radius, angles)
             # self.evar_graft = initial_device_slide_up(self.evar_graft, self.centerline_pc, self.no_graft_points, self.transformed_centreline_pc)
@@ -1462,7 +1465,8 @@ class PointCloudUpdater:
          
     
             print("finished initial slide!")
-            o3d.visualization.draw_geometries([ self.evar_graft, self.transformed_centreline_pc,self.centerline_pc])
+       
+            o3d.visualization.draw_geometries([ self.evar_graft, self.transformed_centreline_pc,self.centerline_pc, self.registered_ct_lineset])
             
 
             if(self.tavr_sim == 1):
