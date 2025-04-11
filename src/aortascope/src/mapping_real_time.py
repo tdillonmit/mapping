@@ -404,6 +404,7 @@ class PointCloudUpdater:
 
         # device deployment simulation
         self.evar_slide_sim = 0
+        self.evar_loft_sim = 0
         self.tavr_sim = 0
 
 
@@ -1412,7 +1413,8 @@ class PointCloudUpdater:
     def simulate_device(self):
 
         # do all initialization here
-        self.evar_slide_sim = 1
+        self.evar_slide_sim = 0
+        self.evar_loft_sim = 1
         self.tavr_sim = 0
 
         tf.keras.backend.clear_session()
@@ -1469,10 +1471,35 @@ class PointCloudUpdater:
             o3d.visualization.draw_geometries([ self.evar_graft, self.transformed_centreline_pc,self.centerline_pc, self.registered_ct_lineset])
             
 
-            if(self.tavr_sim == 1):
-                self.evar_graft = o3d.io.read_triangle_mesh('/home/tdillon/Downloads/sapient_stent_frame.stl')
-                # fill in rest here
+        if(self.tavr_sim == 1):
+            self.evar_graft = o3d.io.read_triangle_mesh('/home/tdillon/Downloads/sapient_stent_frame.stl')
+            # fill in rest here
+
+        if(self.evar_loft_sim):
+
+            # precomputed
+            self.evar_radius = 0.014
+            self.evar_length = 0.14
+            amplitude = 0.005
+            num_struts = 5
+            axial_spacing = 0.015
+            self.no_graft_points = 12
+
+            self.centreline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc.ply')
+            if(self.refine==1):
+                self.centreline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc_refine.ply')
             
+            self.aortic_centreline = np.asarray(self.centerline_pc.points)
+            self.lofted_cylinder, self.strut_geometry, self.strut_distances, self.aortic_centreline, self.centreline_transforms, self.GD_centreline = get_evar_template_geometries(self.aortic_centreline, self.evar_radius, self.evar_length, amplitude, num_struts, axial_spacing, self.no_graft_points)
+
+            self.fen_locations =None
+            self.lofted_cylinder = o3d.t.geometry.TriangleMesh.from_legacy(self.lofted_cylinder)
+
+            self.evar_graft = o3d.geometry.TriangleMesh()
+            self.vis.add_geometry(self.evar_graft)
+
+
+
 
         return
 
@@ -2544,11 +2571,22 @@ class PointCloudUpdater:
 
             
         # ----- SIMULATE DEVICE DEPLOYMENT (SLIDING) ------- #
-        if(self.evar_slide_sim):
+        if(self.evar_slide_sim==1):
 
             self.evar_graft = slide_device_to_pose(self.evar_graft, self.transformed_centreline_pc, self.no_graft_points, extrinsic_matrix, 0.001)
                 
             self.vis.update_geometry(self.evar_graft)
+
+        if(self.evar_loft_sim==1):
+
+            # self.evar_graft = slide_device_to_pose(self.evar_graft, self.transformed_centreline_pc, self.no_graft_points, extrinsic_matrix, 0.001)
+            current_evar = predict_deploy(extrinsic_matrix, self.aortic_centreline,self.lofted_cylinder,self.strut_geometry,self.strut_distances,self.evar_length, self.centreline_transforms, self.GD_centreline, self.fen_locations)
+                
+            self.evar_graft.vertices = current_evar.vertices
+            self.evar_graft.triangles = current_evar.triangles
+            
+            self.vis.update_geometry(self.evar_graft)
+
             
             
 
