@@ -1067,7 +1067,103 @@ class PointCloudUpdater:
 
       
 
+    def load_registetered_ct(self):
 
+
+        print("loading registration lineset")
+        self.registered_ct_lineset = o3d.io.read_line_set(self.write_folder+ '' + '/final_registration.ply')
+        print("loading registration mesh")
+        self.registered_ct_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/final_registration_mesh.ply')
+
+        if(self.refine==1):
+            self.registered_ct_lineset = o3d.io.read_line_set(self.write_folder+ '' + '/final_registration_refine.ply')
+            print("loading registration mesh")
+            self.registered_ct_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/final_registration_mesh_refine.ply')
+
+
+        self.registered_ct_mesh.remove_unreferenced_vertices()
+
+        self.registered_ct_mesh_2 = copy.deepcopy(self.registered_ct_mesh)
+
+        avg_edge_length = 999
+        desired_edge_length = 0.002
+
+        while avg_edge_length > desired_edge_length:
+            self.registered_ct_mesh_2 = self.registered_ct_mesh_2.subdivide_loop(number_of_iterations=1)
+            
+            vertices = np.asarray(self.registered_ct_mesh_2.vertices)
+            triangles = np.asarray(self.registered_ct_mesh_2.triangles)
+            v0 = vertices[triangles[:, 0]]
+            v1 = vertices[triangles[:, 1]]
+            v2 = vertices[triangles[:, 2]]
+            e0 = np.linalg.norm(v0 - v1, axis=1)
+            e1 = np.linalg.norm(v1 - v2, axis=1)
+            e2 = np.linalg.norm(v2 - v0, axis=1)
+            avg_edge_length = np.mean(np.concatenate([e0, e1, e2]))
+
+        print("subdivision complete, computing coarse to fine mapping!")
+        self.knn_idxs, self.knn_weights = precompute_knn_mapping(self.registered_ct_mesh, self.registered_ct_mesh_2, k=5)
+        self.coarse_template_vertices = copy.deepcopy(np.asarray(self.registered_ct_mesh.vertices))
+        self.fine_template_vertices = copy.deepcopy(np.asarray(self.registered_ct_mesh_2.vertices))
+        self.adjacency_matrix = build_adjacency_matrix(self.registered_ct_mesh_2)
+        # visualize_knn_mapping(self.registered_ct_mesh_2, self.registered_ct_mesh, self.knn_idxs, sample_indices=[0, 50, 100])
+        print("computed coarse to fine mesh node mapping")
+
+
+        ct_centroid_pc = o3d.io.read_point_cloud(self.write_folder + '/side_branch_centrelines.ply')
+
+        if(self.refine==1):
+            ct_centroid_pc = o3d.io.read_point_cloud(self.write_folder + '/side_branch_centrelines_refine.ply')
+        self.constraint_locations = np.asarray(ct_centroid_pc.points)
+        # self.ct_centroids = np.load(self.write_folder + '/ct_centroids.npy')
+
+        # NOte that ivus centroids have been used here!!!
+        self.ct_centroids = np.load(self.write_folder + '/ivus_centroids.npy')
+        self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.00225, 20, [0,1,0])
+        self.knn_idxs_spheres, self.knn_weights_spheres = precompute_knn_mapping(self.registered_ct_mesh, self.ct_centroids, k=5)
+
+        self.centerline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc.ply')
+        if(self.refine==1):
+            self.centerline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc_refine.ply')
+
+        # # SMOOTHING MESH AS IMPORTED!! - not anymore
+        # self.registered_ct_mesh = self.registered_ct_mesh.filter_smooth_taubin(number_of_iterations=10)
+        # self.registered_ct_lineset = create_wireframe_lineset_from_mesh(self.registered_ct_mesh)
+        # #END
+
+        self.registered_ct_lineset.paint_uniform_color([0,0,0])
+
+        # self.registered_ct_mesh_2 = copy.deepcopy(self.registered_ct_mesh)
+        
+        self.registered_ct_mesh_2.compute_vertex_normals()
+
+        self.vis2.add_geometry(self.ct_spheres)
+        self.vis2.add_geometry(self.registered_ct_mesh_2)
+        self.vis2.add_geometry(self.tracker)
+
+        
+        # self.vis.remove_geometry(self.catheter)
+
+        self.vis.add_geometry(self.registered_ct_lineset)
+        self.vis.add_geometry(self.ct_spheres)
+
+
+        
+        print("registered the ct from non rigid icp!!")
+
+        # self.scene = o3d.t.geometry.RaycastingScene()
+        # self.registered_ct_mesh = o3d.t.geometry.TriangleMesh.from_legacy(self.registered_ct_mesh)
+        # _ = self.scene.add_triangles(self.registered_ct_mesh)  # we do not need the geometry ID for mesh
+
+        # Get current camera parameters
+        view_control_1 = self.vis.get_view_control()
+
+        view_control_1.set_up([0,-1,0])
+
+        view_control_1.set_front([0,0,-1])
+        
+
+        view_control_1.set_zoom(0.25)
         
     
       
@@ -1157,100 +1253,8 @@ class PointCloudUpdater:
             print("registered_ct is not defined or is None")
         if(self.registered_ct ==1):
 
-            print("loading registration lineset")
-            self.registered_ct_lineset = o3d.io.read_line_set(self.write_folder+ '' + '/final_registration.ply')
-            print("loading registration mesh")
-            self.registered_ct_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/final_registration_mesh.ply')
-
-            if(self.refine==1):
-                self.registered_ct_lineset = o3d.io.read_line_set(self.write_folder+ '' + '/final_registration_refine.ply')
-                print("loading registration mesh")
-                self.registered_ct_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/final_registration_mesh_refine.ply')
-
-
-            self.registered_ct_mesh.remove_unreferenced_vertices()
-
-            self.registered_ct_mesh_2 = copy.deepcopy(self.registered_ct_mesh)
-
-            avg_edge_length = 999
-            desired_edge_length = 0.002
-
-            while avg_edge_length > desired_edge_length:
-                self.registered_ct_mesh_2 = self.registered_ct_mesh_2.subdivide_loop(number_of_iterations=1)
-                
-                vertices = np.asarray(self.registered_ct_mesh_2.vertices)
-                triangles = np.asarray(self.registered_ct_mesh_2.triangles)
-                v0 = vertices[triangles[:, 0]]
-                v1 = vertices[triangles[:, 1]]
-                v2 = vertices[triangles[:, 2]]
-                e0 = np.linalg.norm(v0 - v1, axis=1)
-                e1 = np.linalg.norm(v1 - v2, axis=1)
-                e2 = np.linalg.norm(v2 - v0, axis=1)
-                avg_edge_length = np.mean(np.concatenate([e0, e1, e2]))
-
-            print("subdivision complete, computing coarse to fine mapping!")
-            self.knn_idxs, self.knn_weights = precompute_knn_mapping(self.registered_ct_mesh, self.registered_ct_mesh_2, k=5)
-            self.coarse_template_vertices = copy.deepcopy(np.asarray(self.registered_ct_mesh.vertices))
-            self.fine_template_vertices = copy.deepcopy(np.asarray(self.registered_ct_mesh_2.vertices))
-            self.adjacency_matrix = build_adjacency_matrix(self.registered_ct_mesh_2)
-            # visualize_knn_mapping(self.registered_ct_mesh_2, self.registered_ct_mesh, self.knn_idxs, sample_indices=[0, 50, 100])
-            print("computed coarse to fine mesh node mapping")
-
-
-            ct_centroid_pc = o3d.io.read_point_cloud(self.write_folder + '/side_branch_centrelines.ply')
-
-            if(self.refine==1):
-                ct_centroid_pc = o3d.io.read_point_cloud(self.write_folder + '/side_branch_centrelines_refine.ply')
-            self.constraint_locations = np.asarray(ct_centroid_pc.points)
-            # self.ct_centroids = np.load(self.write_folder + '/ct_centroids.npy')
-
-            # NOte that ivus centroids have been used here!!!
-            self.ct_centroids = np.load(self.write_folder + '/ivus_centroids.npy')
-            self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.00225, 20, [0,1,0])
-            self.knn_idxs_spheres, self.knn_weights_spheres = precompute_knn_mapping(self.registered_ct_mesh, self.ct_centroids, k=5)
-
-            self.centerline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc.ply')
-            if(self.refine==1):
-                self.centerline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc_refine.ply')
-
-            # # SMOOTHING MESH AS IMPORTED!! - not anymore
-            # self.registered_ct_mesh = self.registered_ct_mesh.filter_smooth_taubin(number_of_iterations=10)
-            # self.registered_ct_lineset = create_wireframe_lineset_from_mesh(self.registered_ct_mesh)
-            # #END
-
-            self.registered_ct_lineset.paint_uniform_color([0,0,0])
-
-            # self.registered_ct_mesh_2 = copy.deepcopy(self.registered_ct_mesh)
+            self.load_registetered_ct()
             
-            self.registered_ct_mesh_2.compute_vertex_normals()
-
-            self.vis2.add_geometry(self.ct_spheres)
-            self.vis2.add_geometry(self.registered_ct_mesh_2)
-            self.vis2.add_geometry(self.tracker)
-
-          
-            # self.vis.remove_geometry(self.catheter)
-
-            self.vis.add_geometry(self.registered_ct_lineset)
-            self.vis.add_geometry(self.ct_spheres)
-
-
-            
-            print("registered the ct from non rigid icp!!")
-
-            # self.scene = o3d.t.geometry.RaycastingScene()
-            # self.registered_ct_mesh = o3d.t.geometry.TriangleMesh.from_legacy(self.registered_ct_mesh)
-            # _ = self.scene.add_triangles(self.registered_ct_mesh)  # we do not need the geometry ID for mesh
-
-            # Get current camera parameters
-            view_control_1 = self.vis.get_view_control()
-
-            view_control_1.set_up([0,-1,0])
-
-            view_control_1.set_front([0,0,-1])
-            
-
-            view_control_1.set_zoom(0.25)
 
         if(self.live_deformation == 1):
             self.constraint_radius=self.default_values['/constraint_radius'] 
@@ -1425,6 +1429,13 @@ class PointCloudUpdater:
         self.live_deform = 0
         # self.refine = 0 # want to call the refined centerline
 
+        if(self.registered_ct == 1):
+            self.vis2.remove_geometry(self.registered_ct_mesh_2)
+            self.vis2.remove_geometry(self.tracker)
+            # self.vis.remove_geometry(self.catheter)
+            self.vis.remove_geometry(self.registered_ct_lineset)
+            self.vis.remove_geometry(self.ct_spheres)
+
         if(self.evar_slide_sim == 1):
       
 
@@ -1485,9 +1496,7 @@ class PointCloudUpdater:
             axial_spacing = 0.015
             self.no_graft_points = 12
 
-            self.centreline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc.ply')
-            if(self.refine==1):
-                self.centreline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc_refine.ply')
+            self.load_registetered_ct()
             
             self.aortic_centreline = np.asarray(self.centerline_pc.points)
             self.lofted_cylinder, self.strut_geometry, self.strut_distances, self.aortic_centreline, self.centreline_transforms, self.GD_centreline = get_evar_template_geometries(self.aortic_centreline, self.evar_radius, self.evar_length, amplitude, num_struts, axial_spacing, self.no_graft_points)
