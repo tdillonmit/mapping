@@ -1436,50 +1436,6 @@ class PointCloudUpdater:
             self.vis.remove_geometry(self.registered_ct_lineset)
             self.vis.remove_geometry(self.ct_spheres)
 
-        if(self.evar_slide_sim == 1):
-      
-
-            self.graft_start_idx_previous = 999
-
-            self.centreline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc.ply')
-            if(self.refine==1):
-                self.centreline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc_refine.ply')
-
-            self.centreline_pc.paint_uniform_color([0,0,0])
-            self.geodesic_centreline = compute_geodesic_distance_on_point_cloud(self.centreline_pc).squeeze()
-
-
-            self.evar_radius = 0.014
-            self.evar_length = 0.15
-            amplitude = 0.005
-            num_struts = 5
-            axial_spacing = 0.015
-            self.no_graft_points = 12
-
-            self.evar_graft = get_evar_geometry(self.evar_radius, self.evar_length, amplitude, num_struts, axial_spacing, self.no_graft_points)
-        
-            self.transformed_centreline_pc, self.evar_graft = initial_device_alignment(self.evar_graft, self.evar_length, self.no_graft_points, self.centreline_pc)
-            print('initial alignment done')
-            self.centerline_pc.paint_uniform_color([0,0,0])
-            self.transformed_centreline_pc.paint_uniform_color([1,0,1])
-
-            o3d.visualization.draw_geometries([ self.evar_graft, self.transformed_centreline_pc,self.centerline_pc, self.registered_ct_lineset])
-
-            o3d.visualization.draw_geometries([self.transformed_centreline_pc, self.centerline_pc, self.registered_ct_lineset])
-            
-            self.evar_graft = slide_device_to_pose(self.evar_graft, self.transformed_centreline_pc, self.no_graft_points, self.most_recent_extrinsic, 0.001)
-            
-            # target_spheres = get_fevar_spheres(self.centerline_pc, geodesics, radius, angles)
-            # self.evar_graft = initial_device_slide_up(self.evar_graft, self.centerline_pc, self.no_graft_points, self.transformed_centreline_pc)
-
-            self.vis.add_geometry(self.evar_graft)
-            # self.vis.add_geometry(target_spheres)
-
-         
-    
-            print("finished initial slide!")
-       
-            o3d.visualization.draw_geometries([ self.evar_graft, self.transformed_centreline_pc,self.centerline_pc, self.registered_ct_lineset])
             
 
         if(self.tavr_sim == 1):
@@ -1501,14 +1457,13 @@ class PointCloudUpdater:
             self.aortic_centreline = np.asarray(self.centerline_pc.points)
             self.lofted_cylinder, self.strut_geometry, self.strut_distances, self.aortic_centreline, self.centreline_transforms, self.GD_centreline = get_evar_template_geometries(self.aortic_centreline, self.evar_radius, self.evar_length, amplitude, num_struts, axial_spacing, self.no_graft_points)
 
-            self.fen_locations =None
-            self.lofted_cylinder = o3d.t.geometry.TriangleMesh.from_legacy(self.lofted_cylinder)
+            # for fenestrated evar (FEVAR)
+            self.fen_distances =np.asarray([0.1,0.05,0.1])
+            self.fen_angles = np.asarray([3.14, 2*3.24, 3.14/2])
 
+            self.lofted_cylinder = o3d.t.geometry.TriangleMesh.from_legacy(self.lofted_cylinder)
             self.evar_graft = o3d.geometry.TriangleMesh()
             self.vis.add_geometry(self.evar_graft)
-
-
-
 
         return
 
@@ -2589,7 +2544,7 @@ class PointCloudUpdater:
         if(self.evar_loft_sim==1):
 
             # self.evar_graft = slide_device_to_pose(self.evar_graft, self.transformed_centreline_pc, self.no_graft_points, extrinsic_matrix, 0.001)
-            current_evar = predict_deploy(extrinsic_matrix, self.aortic_centreline,self.lofted_cylinder,self.strut_geometry,self.strut_distances,self.evar_length, self.centreline_transforms, self.GD_centreline, self.fen_locations)
+            current_evar = predict_deploy(extrinsic_matrix, self.aortic_centreline,self.lofted_cylinder,self.strut_geometry,self.strut_distances,self.evar_length, self.centreline_transforms, self.GD_centreline,self.evar_radius, self.fen_distances, self.fen_angles)
                 
             self.evar_graft.vertices = current_evar.vertices
             self.evar_graft.triangles = current_evar.triangles
