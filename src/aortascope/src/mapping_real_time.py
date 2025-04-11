@@ -2584,6 +2584,9 @@ class PointCloudUpdater:
                 
             self.evar_graft.vertices = current_evar.vertices
             self.evar_graft.triangles = current_evar.triangles
+            self.evar_graft.vertex_colors = current_evar.vertex_colors
+
+            self.evar_graft.compute_vertex_normals()
             
             self.vis.update_geometry(self.evar_graft)
 
