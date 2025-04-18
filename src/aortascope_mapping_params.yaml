@@ -35,7 +35,7 @@ live_deformation: 0
 
 double_display: 1
 test_image: 0
-test_transform: 0
+test_transform: 1
 
 
 
