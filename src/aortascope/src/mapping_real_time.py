@@ -269,11 +269,14 @@ class PointCloudUpdater:
         
         # BUFFER INITIALIZATION
         self.buffer_size = 30
+        self.lstm_length = 5
+
         self.centroid_buffer = deque(maxlen=self.buffer_size)
         self.delta_buffer_x = deque(maxlen=self.buffer_size)
         self.delta_buffer_y = deque(maxlen=self.buffer_size)
         self.delta_buffer_z = deque(maxlen=self.buffer_size)
         self.position_buffer = deque(maxlen=self.buffer_size)
+        self.grayscale_buffer = deque(maxlen=self.lstm_length)
         self.mask_1_buffer = deque(maxlen=self.buffer_size)
         self.mask_2_buffer = deque(maxlen=self.buffer_size)
         self.orifice_angles = deque(maxlen=5)
@@ -513,6 +516,14 @@ class PointCloudUpdater:
 
             self.model = model
 
+        if(self.deeplumen_lstm_on==1):
+            
+            model = build_temporal_segmenter(time_steps=5, input_shape=(224, 224, 3), num_classes=3)
+            model.load_weights(self.model_path)
+            # this makes compilation 20x faster!!
+            model = tf.function(model, jit_compile=True)
+            self.model = model
+
     def load_parameters(self, config_yaml):
 
         # GUI FUNCTIONS
@@ -535,6 +546,8 @@ class PointCloudUpdater:
         self.tsdf_map = config_yaml['tsdf_map']
 
         self.deeplumen_on = config_yaml['deeplumen_on']
+
+        self.deeplumen_lstm_on = config_yaml['deeplumen_lstm_on']
 
         self.model_path  = config_yaml['model_path']
 
@@ -671,14 +684,23 @@ class PointCloudUpdater:
         create_folder(folder_path)
 
         # load the images from the specified paths
-        image_path = self.write_folder + '/grayscale_images/*.npy'
-        sorted_images=sort_folder_string(image_path, "grayscale_image_")
-        grayscale_images=load_numpy_data_from_folder(sorted_images)
+        # image_path = self.write_folder + '/grayscale_images/*.npy'
+        # sorted_images=sort_folder_string(image_path, "grayscale_image_")
+        # grayscale_images=load_numpy_data_from_folder(sorted_images)
+        
+        # if replaying just image data from old computer datasets
+        image_paths = sorted(glob.glob(os.path.join(self.write_folder, 'grayscale_images', '*.npy')))
+        grayscale_images = []
+        em_transforms = []
+        for image in image_paths:
+            grayscale_images.append(np.load(image))
+            em_transforms.append(np.eye(4))
+        
+        # transform_path = self.write_folder + '/transform_data/*.npy'
+        # sorted_transforms=sort_folder_string(transform_path, "TW_EM_")
+        # em_transforms=load_transform_data_from_folder(sorted_transforms)
 
-        transform_path = self.write_folder + '/transform_data/*.npy'
-        sorted_transforms=sort_folder_string(transform_path, "TW_EM_")
-        em_transforms=load_transform_data_from_folder(sorted_transforms)
-
+        print("pulling from folder",self.write_folder  )
         print("number of loaded images:", len(grayscale_images))
 
 
@@ -697,7 +719,7 @@ class PointCloudUpdater:
             
             # print("TW_EM:", TW_EM)
 
-           
+            time.sleep(0.1)
 
             # TW_EM = np.eye(4)  # if you want to visualize only the image data
 
@@ -705,6 +727,7 @@ class PointCloudUpdater:
             #     TW_EM =  average_transform @ em_transforms[i]
 
             # grayscale_image = cv2.cvtColor(grayscale_image, cv2.COLOR_GRAY2BGR) 
+            grayscale_image = cv2.cvtColor(grayscale_image, cv2.COLOR_BGR2GRAY) 
 
             # grayscale_image=preprocess_ivus_image(grayscale_image, pc_updater.box_crop, pc_updater.circle_crop, pc_updater.text_crop, pc_updater.crosshairs_crop)
 
@@ -804,6 +827,7 @@ class PointCloudUpdater:
         rospy.set_param('funsr_started', 0)
         self.write_folder = rospy.get_param('dataset', 0)
         self.deeplumen_on = 0
+        self.deeplumen_lstm_on = 0
         tf.keras.backend.clear_session()
         tf.compat.v1.reset_default_graph()
         del self.model
@@ -822,6 +846,7 @@ class PointCloudUpdater:
         rospy.set_param('registration_started', 0)
         self.write_folder = rospy.get_param('dataset', 0)
         self.deeplumen_on = 0
+        self.deeplumen_lstm_on = 0
         tf.keras.backend.clear_session()
         tf.compat.v1.reset_default_graph()
         del self.model
@@ -966,9 +991,9 @@ class PointCloudUpdater:
         # TEMP BOSTON SCIENTIFIC!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!11
         
 
-        for (grayscale_image, TW_EM, image_tag) in zip(self.image_batch, self.tw_em_batch, self.image_tags):
+        # for (grayscale_image, TW_EM, image_tag) in zip(self.image_batch, self.tw_em_batch, self.image_tags):
 
-        # for (grayscale_image, image_tag) in zip(self.image_batch, self.image_tags):
+        for (grayscale_image, image_tag) in zip(self.image_batch, self.image_tags):
 
             # if i % save_frequency == 0:
             # Save the image
@@ -980,10 +1005,10 @@ class PointCloudUpdater:
 
             # Save the TW_EM data
             
-            tw_em_filename = f'{self.write_folder}/transform_data/TW_EM_{self.starting_index + image_tag -1}.npy'
-            with open(tw_em_filename, 'wb') as f:
-                TW_EM = np.array(TW_EM, dtype=np.float64).reshape(4, 4)
-                np.save(f, TW_EM)
+            # tw_em_filename = f'{self.write_folder}/transform_data/TW_EM_{self.starting_index + image_tag -1}.npy'
+            # with open(tw_em_filename, 'wb') as f:
+            #     TW_EM = np.array(TW_EM, dtype=np.float64).reshape(4, 4)
+            #     np.save(f, TW_EM)
 
 
 
@@ -1075,6 +1100,7 @@ class PointCloudUpdater:
         # self.vis2.add_geometry(ivus_funsr_mesh)
 
         self.deeplumen_on = 0
+        self.deeplumen_lstm_on = 0
 
         if not hasattr(self, 'model'):
             self.initialize_deeplumen_model()
@@ -1133,7 +1159,8 @@ class PointCloudUpdater:
 
         # NOte that ivus centroids have been used here!!!
         self.ct_centroids = np.load(self.write_folder + '/ivus_centroids.npy')
-        self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.00225, 20, [0,1,0])
+        # self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.00225, 20, [0,1,0])
+        self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.004, 20, [0,1,0])
         self.knn_idxs_spheres, self.knn_weights_spheres = precompute_knn_mapping(self.registered_ct_mesh, self.ct_centroids, k=5)
 
         self.centerline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc.ply')
@@ -1151,7 +1178,9 @@ class PointCloudUpdater:
         
         self.registered_ct_mesh_2.compute_vertex_normals()
 
-        self.vis2.add_geometry(self.ct_spheres)
+        # DELETED FOR FEVAR
+        # self.vis2.add_geometry(self.ct_spheres)
+
         self.vis2.add_geometry(self.registered_ct_mesh_2)
         self.vis2.add_geometry(self.tracker)
 
@@ -1159,7 +1188,9 @@ class PointCloudUpdater:
         # self.vis.remove_geometry(self.catheter)
 
         self.vis.add_geometry(self.registered_ct_lineset)
-        self.vis.add_geometry(self.ct_spheres)
+
+        # DELETED FOR FEVAR
+        # self.vis.add_geometry(self.ct_spheres)
 
 
         
@@ -1187,6 +1218,7 @@ class PointCloudUpdater:
         self.write_folder = rospy.get_param('dataset', 0) 
 
         self.deeplumen_on = 0
+        self.deeplumen_lstm_on = 0
 
         if(self.write_folder ==0):
             self.write_folder = self.prompt_for_folder()
@@ -1321,6 +1353,12 @@ class PointCloudUpdater:
             if not hasattr(self, 'model'):
                 self.initialize_deeplumen_model()
 
+        if(self.deeplumen_lstm_on ==1):
+    
+
+            if not hasattr(self, 'model'):
+                self.initialize_deeplumen_model()
+
             
 
 
@@ -1338,6 +1376,7 @@ class PointCloudUpdater:
 
             self.dest_frame = 'target2'
             self.deeplumen_on = 0
+            self.deeplumen_lstm_on = 0
             self.live_deformation = 0
 
         elif (self.dest_frame == 'target2'):
@@ -1438,6 +1477,7 @@ class PointCloudUpdater:
         tf.keras.backend.clear_session()
         tf.compat.v1.reset_default_graph()
         self.deeplumen_on = 0
+        self.deeplumen_lstm_on = 0
         self.extend = 0
         self.vpC_map = 0
         self.live_deform = 0
@@ -1461,7 +1501,12 @@ class PointCloudUpdater:
         if(self.evar_loft_sim):
 
             # precomputed
-            self.evar_radius = 0.014
+            # self.evar_radius = 0.014
+            self.evar_radius = 0.012
+
+            # deployed inside FEVAR
+            self.evar_radius = 0.009
+
             self.evar_length = 0.14
             amplitude = 0.005
             num_struts = 5
@@ -1471,15 +1516,22 @@ class PointCloudUpdater:
             self.load_registetered_ct()
             
             self.aortic_centreline = np.asarray(self.centerline_pc.points)
+            
+            x_points, y_points, z_points = fit_3D_bspline(self.aortic_centreline, 0.0001)
+            self.aortic_centreline = np.column_stack((x_points,y_points,z_points))
             self.lofted_cylinder, self.strut_geometry, self.strut_distances, self.aortic_centreline, self.centreline_transforms, self.GD_centreline = get_evar_template_geometries(self.aortic_centreline, self.evar_radius, self.evar_length, amplitude, num_struts, axial_spacing, self.no_graft_points)
 
             # for fenestrated evar (FEVAR)
-            self.fen_distances =np.asarray([0.1,0.05,0.1])
-            self.fen_angles = np.asarray([3.14, 2*3.24, 3.14/2])
+            # self.fen_distances =np.asarray([0.1,0.05,0.1])
+            self.fen_distances =np.asarray([0.044, 0.056, 0.1155, 0.07])
+            self.fen_angles = np.asarray([2*3.24, 2*3.24, 3.12/2, 2*2.7])
 
             self.lofted_cylinder = o3d.t.geometry.TriangleMesh.from_legacy(self.lofted_cylinder)
             self.evar_graft = o3d.geometry.TriangleMesh()
             self.vis.add_geometry(self.evar_graft)
+
+            # FOR FEVAR NAVIGATION
+            self.vis2.add_geometry(self.evar_graft)
 
         return
 
@@ -1586,63 +1638,63 @@ class PointCloudUpdater:
             TW_EM = None
 
 
-        # temp for boston scientific
+        # # temp for boston scientific
 
        
 
-        # # run these functions once when triggered and update the visualizer accordingly
-        # start_record = rospy.get_param('start_record', 0 )
-        # if(start_record ==1):
-        #     self.start_recording()
-        #     rospy.set_param('start_record', 0)
+        # run these functions once when triggered and update the visualizer accordingly
+        start_record = rospy.get_param('start_record', 0 )
+        if(start_record ==1):
+            self.start_recording()
+            rospy.set_param('start_record', 0)
 
-        # save_dataset = rospy.get_param('save_data', 0 )
-        # if(save_dataset ==1):
-        #     self.save_image_and_transform_data()
-        #     rospy.set_param('save_data', 0)
+        save_dataset = rospy.get_param('save_data', 0 )
+        if(save_dataset ==1):
+            self.save_image_and_transform_data()
+            rospy.set_param('save_data', 0)
     
-        # rgb_image_data = np.frombuffer(msg.data, dtype=np.uint8)
+        rgb_image_data = np.frombuffer(msg.data, dtype=np.uint8)
 
-        # rgb_image = rgb_image_data.reshape((self.image_height, self.image_width, 3))
+        rgb_image = rgb_image_data.reshape((self.image_height, self.image_width, 3))
 
-        # rgb_image_msg = Image(
+        rgb_image_msg = Image(
               
-        #         height=np.shape(rgb_image)[0],
-        #         width=np.shape(rgb_image)[1],
-        #         encoding='rgb8',
-        #         is_bigendian=False,
-        #         step=np.shape(rgb_image)[1] * 3,
-        #         data=rgb_image.tobytes()
-        #     )
-        # self.rgb_image_pub.publish(rgb_image_msg)
+                height=np.shape(rgb_image)[0],
+                width=np.shape(rgb_image)[1],
+                encoding='rgb8',
+                is_bigendian=False,
+                step=np.shape(rgb_image)[1] * 3,
+                data=rgb_image.tobytes()
+            )
+        self.rgb_image_pub.publish(rgb_image_msg)
 
 
-        # if(self.record==1):
-        #     # code for saving images
+        if(self.record==1):
+            # code for saving images
 
-        #     self.image_batch.append(rgb_image)
+            self.image_batch.append(rgb_image)
 
-        #     self.image_tags.append(self.image_number)
+            self.image_tags.append(self.image_number)
 
-        #     self.image_number = self.image_number+1
+            self.image_number = self.image_number+1
 
 
-        # # reset memory for efficiency
-        # if(self.record == 1):
-        #     if(len(self.image_batch)>150):
+        # reset memory for efficiency
+        if(self.record == 1):
+            if(len(self.image_batch)>150):
 
-        #         # consider using threading while saving to save time
-        #         self.quick_save()
+                # consider using threading while saving to save time
+                self.quick_save()
 
-        #         #clear the image batch and save the callback number
-        #         self.image_batch = []
-        #         self.image_tags = []
-        #         self.image_number = 1
+                #clear the image batch and save the callback number
+                self.image_batch = []
+                self.image_tags = []
+                self.image_number = 1
 
                 
 
 
-        # end of temp
+        # # end of temp
 
        
         TW_EM=transform_stamped_to_matrix(TW_EM)
@@ -1678,21 +1730,21 @@ class PointCloudUpdater:
         grayscale_image=preprocess_ivus_image(rgb_image,self.box_crop,self.circle_crop,self.text_crop,self.crosshairs_crop)
 
         
-        #branch image simulator
-        self.branch_sim_index = self.branch_sim_index + 1
+        # BRANCH IMAGE SIMULATOR
+        # self.branch_sim_index = self.branch_sim_index + 1
 
-        subbed_in = self.branch_sim_index//2
-        # subbed_in = self.branch_sim_index
+        # subbed_in = self.branch_sim_index//2
+        # # subbed_in = self.branch_sim_index
 
-        rgb_image = cv2.imread("/home/tdillon/datasets/k8_tom_3/rgb_jpgs/grayscale_image_" + str(subbed_in) + ".jpg")
-        grayscale_image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2GRAY)
+        # rgb_image = cv2.imread("/home/tdillon/datasets/k8_tom_3/rgb_jpgs/grayscale_image_" + str(subbed_in) + ".jpg")
+        # grayscale_image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2GRAY)
 
 
-        # if(self.branch_sim_index > 1076):
-        #     self.branch_sim_index = 866
+        # # if(self.branch_sim_index > 1076):
+        # #     self.branch_sim_index = 866
 
-        if(self.branch_sim_index > 1066*2):
-            self.branch_sim_index = 1034*2
+        # if(self.branch_sim_index > 1066*2):
+        #     self.branch_sim_index = 1034*2
         
             
  
@@ -1840,7 +1892,7 @@ class PointCloudUpdater:
         # ------ FIRST RETURN SEGMENTATION -------- #
 
         # first return segmentation
-        if(self.deeplumen_on == 0 and self.dest_frame == 'target1'):
+        if(self.deeplumen_on == 0 and self.deeplumen_lstm_on == 0 and self.dest_frame == 'target1'):
 
             relevant_pixels=first_return_segmentation(grayscale_image,threshold, crop_index,self.gridlines)
             relevant_pixels=np.asarray(relevant_pixels).squeeze()
@@ -1922,40 +1974,69 @@ class PointCloudUpdater:
             # two_d_points=centred_pixels*scaling
             # three_d_points=np.hstack((np.zeros((two_d_points.shape[0], 1)),two_d_points)) 
 
+        if(self.deeplumen_on == 1 or self.deeplumen_lstm_on == 1):
 
-        if(self.deeplumen_on == 1):
-        
-            # FOR DISSECTION IMPLEMENTATION LATER
-
-        
-
-            # # note 224,224 image for compatibility with network is hardcoded
-            grayscale_image = cv2.resize(grayscale_image, (224, 224))
-            image = cv2.cvtColor(grayscale_image,cv2.COLOR_GRAY2RGB)
-
-
-            # #---------- SEGMENTATION --------------#
-
-
-            start_time = time.time()
+            if(self.deeplumen_on == 1):
+            
+                # FOR DISSECTION IMPLEMENTATION LATER
 
             
 
-            # mask_1, mask_2 = deeplumen_segmentation(image,self.model)
-            pred= deeplumen_segmentation(image,self.model)
-            raw_data = pred[0].numpy()
-            mask_1, mask_2 = post_process_deeplumen(raw_data)
+                # # note 224,224 image for compatibility with network is hardcoded
+                grayscale_image = cv2.resize(grayscale_image, (224, 224))
+                image = cv2.cvtColor(grayscale_image,cv2.COLOR_GRAY2RGB)
 
-            # get_gpu_temp()
-            # get_cpu_temp()
 
-            end_time=time.time()
-            diff_time=end_time-start_time
-            print("segmentation time:", diff_time)
+                # #---------- SEGMENTATION --------------#
+
+
+                start_time = time.time()
+
+                
+
+                # mask_1, mask_2 = deeplumen_segmentation(image,self.model)
+                pred= deeplumen_segmentation(image,self.model)
+                raw_data = pred[0].numpy()
+                mask_1, mask_2 = post_process_deeplumen(raw_data)
+
+                # get_gpu_temp()
+                # get_cpu_temp()
+
+                end_time=time.time()
+                diff_time=end_time-start_time
+                print("segmentation time:", diff_time)
+
+            
+
+            if(self.deeplumen_lstm_on == 1):
+
+                # add most recent image to buffer
+                self.grayscale_buffer.append(image)
+                
+                # fetch sequence of images from buffer
+                if(len(self.grayscale_buffer) >= self.lstm_length):
+                
+
+                    # get mask_1 and mask_2 as usual
+                    start_time = time.time()
+
+                    sequence = np.stack(self.grayscale_buffer, axis=0) 
+
+                    pred= deeplumen_lstm_segmentation(sequence,self.model)
+                    raw_data = pred[0].numpy()
+                    mask_1, mask_2 = post_process_deeplumen(raw_data)
+
+
+                    end_time=time.time()
+                    diff_time=end_time-start_time
+                    print("segmentation time:", diff_time)
+            
+                else:
+                    mask_1,mask_2 = None,None
 
          
 
-            # ensures the near lumen is always the one with the probe in it
+            # ENSURES NEAR LUMEN IS ALWAYS THE ONE WITH THE PROBE IN IT
             # if(mask_2[112,112] == 255):
                 
             #     mask_1, mask_2 = mask_2, mask_1
@@ -1984,8 +2065,6 @@ class PointCloudUpdater:
             #         mask_1, mask_2 = mask_2, mask_1
 
             #         mask_1 = cv2.bitwise_or(component_mask + mask_1)
-            
-
             
 
             # self.mask_1_buffer.append(mask_1)
@@ -2154,6 +2233,13 @@ class PointCloudUpdater:
             end_time = time.time()
             diff_time = end_time - start_time
             # print("image publish time", diff_time)
+
+
+        
+
+
+            
+
 
 
         scaling=self.default_values['/scaling'] 
@@ -2544,7 +2630,7 @@ class PointCloudUpdater:
                 
 
         # ---- APPEND TO ORIFICE CENTER PC ------ #
-        if(self.orifice_center_map == 1 and self.deeplumen_on ==1):
+        if(self.orifice_center_map == 1 and (self.deeplumen_on ==1 or self.deeplumen_lstm_on==1)):
 
             if(orifice_center_three_d_points is not None):           
                 
@@ -2615,7 +2701,20 @@ class PointCloudUpdater:
         if(self.evar_loft_sim==1):
 
             # self.evar_graft = slide_device_to_pose(self.evar_graft, self.transformed_centreline_pc, self.no_graft_points, extrinsic_matrix, 0.001)
-            current_evar = predict_deploy(extrinsic_matrix, self.aortic_centreline,self.lofted_cylinder,self.strut_geometry,self.strut_distances,self.evar_length, self.centreline_transforms, self.GD_centreline,self.evar_radius, self.fen_distances, self.fen_angles)
+
+            # STATIONARY GRAFT (DEPLOYED)
+            # extrinsic_matrix_temp = np.eye(4)
+            # extrinsic_matrix_temp[:3,3] = self.aortic_centreline[225, :]
+
+            print("extrinsic", extrinsic_matrix)
+
+            extrinsic_matrix_temp = np.asarray([[-0.29256042, -0.08216749, -0.95271029,  0.19205677],
+            [-0.94842493,  0.15210554,  0.27812596, -0.04631414],
+            [ 0.1220596,   0.98494285, -0.12242975, -0.06255438],
+            [ 0.,          0.,          0.,          1.        ]])
+
+            current_evar = predict_deploy(extrinsic_matrix_temp, self.aortic_centreline,self.lofted_cylinder,self.strut_geometry,self.strut_distances,self.evar_length, self.centreline_transforms, self.GD_centreline,self.evar_radius, self.fen_distances, self.fen_angles)
+            # current_evar = predict_deploy(extrinsic_matrix, self.aortic_centreline,self.lofted_cylinder,self.strut_geometry,self.strut_distances,self.evar_length, self.centreline_transforms, self.GD_centreline,self.evar_radius, self.fen_distances, self.fen_angles)
                 
             self.evar_graft.vertices = current_evar.vertices
             self.evar_graft.triangles = current_evar.triangles
@@ -2624,6 +2723,9 @@ class PointCloudUpdater:
             self.evar_graft.compute_vertex_normals()
             
             self.vis.update_geometry(self.evar_graft)
+
+            # FOR FEVAR NAVIGATION
+            self.vis2.update_geometry(self.evar_graft)
 
             
             

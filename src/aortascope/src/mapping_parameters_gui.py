@@ -117,7 +117,7 @@ def call_gating():
     
 def call_replay():
     rospy.set_param("replay", 1)
-    root.percent.config(text = "Replaying Dataset")
+    # root.percent.config(text = "Replaying Dataset")
     root.update_idletasks()
     time.sleep(0.5)
     

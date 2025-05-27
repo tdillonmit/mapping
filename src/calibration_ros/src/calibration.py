@@ -44,7 +44,9 @@ def make_circle_crop(new_height,new_width,centre_x,centre_y):
     cv2.circle(mask, (centre_x,centre_y), radius, 255, thickness=cv2.FILLED)
     return mask
 
-def preprocess_ivus_image(original_image,box_crop,circle_crop,text_crop,crosshairs_crop,wire_crop):
+def preprocess_ivus_image(original_image,box_crop,circle_crop,text_crop,crosshairs_crop,wire_crop, machine):
+
+    
 
     # initial box crop
     cropped_image=original_image[box_crop[0]:box_crop[1],box_crop[2]:box_crop[3],:]
@@ -52,11 +54,17 @@ def preprocess_ivus_image(original_image,box_crop,circle_crop,text_crop,crosshai
     # grayscale the image
     grayscale_image = cv2.cvtColor(cropped_image, cv2.COLOR_RGB2GRAY)
 
+    # if(machine == 'boston_scientific'):
+    #     cv2.imshow('original image', grayscale_image)
+    #     cv2.imshow('circle crop', circle_crop)
+    #     cv2.waitKey(0)
+
     # radius cropping
     result = cv2.bitwise_and(grayscale_image, grayscale_image, mask=circle_crop)
 
     # crosshairs crop
-    result = cv2.bitwise_and(result, result, mask=crosshairs_crop)
+    if(machine =='philips'):
+        result = cv2.bitwise_and(result, result, mask=crosshairs_crop)
 
     # final text cropping
     cv2.rectangle(result, (text_crop[0],text_crop[1]), (text_crop[2],text_crop[3]), 0, thickness=cv2.FILLED)
@@ -394,9 +402,15 @@ class PointCloudUpdater:
         radial_offset = rospy.get_param('radial_offset')
         oclock = rospy.get_param('oclock')
 
+        self.machine='boston_scientific'
+
+
         # Define parameter names and default values
         param_names = ['/angle', '/translation','/scaling','/threshold', '/radial_offset', '/oclock']
-        default_values = {'/angle': 3.24, '/translation': 0.009, '/scaling': 0.0000765, '/threshold':112, '/radial_offset':0.00225, '/oclock':2.16}
+        if(self.machine=='philips'):
+            default_values = {'/angle': 3.24, '/translation': 0.009, '/scaling': 0.0000765, '/threshold':112, '/radial_offset':0.00225, '/oclock':2.16}
+        if(self.machine=='boston_scientific'):
+            default_values = {'/angle': 3.24, '/translation': 0.009, '/scaling': 0.00005126, '/threshold':112, '/radial_offset':0.002, '/oclock':2.16}
 
         # Set default parameter values if they don't exist
         for param_name in param_names:
@@ -501,33 +515,67 @@ class PointCloudUpdater:
         self.binary_image_pub = rospy.Publisher('/binary_image', Image, queue_size=1)
         self.rgb_image_pub = rospy.Publisher('/rgb_image', Image, queue_size=1)
 
+        
+
+        # philips
         # image preprocessing parameters
-        start_x=59
-        end_x=840
-        start_y=10
-        end_y=790
-        self.box_crop=[start_x,end_x,start_y,end_y]
+        if(self.machine == 'philips'):
+            start_x=59
+            end_x=840
+            start_y=10
+            end_y=790
+            self.box_crop=[start_x,end_x,start_y,end_y]
 
-        text_start_x=393
-        text_end_x=440
-        text_start_y=0
-        text_end_y=15
-        self.text_crop=[text_start_x,text_start_y,text_end_x,text_end_y]
-        
-        self.new_height=end_x-start_x
-        self.new_width=end_y-start_y
-        self.centre_x=int(self.new_height/2)
-        self.centre_y=int(self.new_width/2)
-        
-        crosshair_width=5
-        crosshair_height=2
-        crosshair_vert_coordinates=[[380,62],[380,128],[380,193],[380,259],[380,324],[394,455],[394,520],[394,585],[394,651],[394,717]]
-        crosshair_horiz_coordinates=[[61,395],[127,395],[192,395],[258,395],[323,395],[454,381],[519,381],[585,381],[650,381],[716,381]]
-        self.crosshairs_crop=make_crosshairs_crop(self.new_height,self.new_width,crosshair_width,crosshair_height,crosshair_vert_coordinates,crosshair_horiz_coordinates)
+            text_start_x=393
+            text_end_x=440
+            text_start_y=0
+            text_end_y=15
+            self.text_crop=[text_start_x,text_start_y,text_end_x,text_end_y]
+            
+            self.new_height=end_x-start_x
+            self.new_width=end_y-start_y
+            self.centre_x=int(self.new_height/2)
+            self.centre_y=int(self.new_width/2)
+            
+            crosshair_width=5
+            crosshair_height=2
+            crosshair_vert_coordinates=[[380,62],[380,128],[380,193],[380,259],[380,324],[394,455],[394,520],[394,585],[394,651],[394,717]]
+            crosshair_horiz_coordinates=[[61,395],[127,395],[192,395],[258,395],[323,395],[454,381],[519,381],[585,381],[650,381],[716,381]]
+            self.crosshairs_crop=make_crosshairs_crop(self.new_height,self.new_width,crosshair_width,crosshair_height,crosshair_vert_coordinates,crosshair_horiz_coordinates)
 
-        radius_wire=49
-        self.wire_crop=make_wire_crop(self.new_height,self.new_width,self.centre_x,self.centre_y, radius_wire)
-        self.circle_crop=make_circle_crop(self.new_height,self.new_width,self.centre_x,self.centre_y)
+            radius_wire=49
+            self.wire_crop=make_wire_crop(self.new_height,self.new_width,self.centre_x,self.centre_y, radius_wire)
+            self.circle_crop=make_circle_crop(self.new_height,self.new_width,self.centre_x,self.centre_y)
+
+
+        # boston scientific ilab
+        if(self.machine=='boston_scientific'):
+            start_y=337  # note order of y and x flipped relative to philips
+            end_y=1133
+            start_x=62
+            end_x=858
+            self.box_crop=[start_x,end_x,start_y,end_y]
+
+            text_start_y=990
+            text_end_y=783
+            text_start_x=1138
+            text_end_x=855
+            self.text_crop=[text_start_x,text_start_y,text_end_x,text_end_y]
+            
+            self.new_height=end_x-start_x
+            self.new_width=end_y-start_y
+            self.centre_x=int(self.new_height/2)
+            self.centre_y=int(self.new_width/2)
+            
+            crosshair_width=0
+            crosshair_height=0
+            crosshair_vert_coordinates=[[self.centre_x, self.centre_y]]
+            crosshair_horiz_coordinates=[[self.centre_x, self.centre_y]]
+            self.crosshairs_crop=make_crosshairs_crop(self.new_height,self.new_width,crosshair_width,crosshair_height,crosshair_vert_coordinates,crosshair_horiz_coordinates)
+
+            radius_wire=36
+            self.wire_crop=make_wire_crop(self.new_height,self.new_width,self.centre_x,self.centre_y, radius_wire)
+            self.circle_crop=make_circle_crop(self.new_height,self.new_width,self.centre_x,self.centre_y)
 
         # cv2.namedWindow('ImageWindow', cv2.WINDOW_NORMAL)
 
@@ -549,14 +597,21 @@ class PointCloudUpdater:
 
     def image_callback(self, msg):
         
+        
         image_width = rospy.get_param('/usb_cam/image_width', default=1280)
         image_height = rospy.get_param('/usb_cam/image_height', default=1024)
 
         # Assuming RGB format
         rgb_image_data = np.frombuffer(msg.data, dtype=np.uint8)
 
+        
+
         # Reshape the RGB data
         rgb_image = rgb_image_data.reshape((image_height, image_width, 3))
+
+        
+
+
 
         
         #  for simulation, import images instead.. (comment this line if necessary)
@@ -569,9 +624,11 @@ class PointCloudUpdater:
         # simulate a single static ultrasound scan
         # rgb_image = np.load('/media/tdillon/4D71-BDA7/frame_grabber_images/string_phantom/rgb_image_150.npy')
 
-        grayscale_image=preprocess_ivus_image(rgb_image,self.box_crop,self.circle_crop,self.text_crop,self.crosshairs_crop,self.wire_crop)
+        grayscale_image=preprocess_ivus_image(rgb_image,self.box_crop,self.circle_crop,self.text_crop,self.crosshairs_crop,self.wire_crop, self.machine)
         centre_x=self.centre_x
         centre_y=self.centre_y
+
+        
 
         # #Crop the image - assuming 1280 x 1024 image
         # rgb_image=rgb_image[55:840,5:792,:]
