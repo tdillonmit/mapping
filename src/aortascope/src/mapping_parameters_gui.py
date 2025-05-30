@@ -91,10 +91,11 @@ def call_register():
 
     # visualize = checkbox_var.get()
     visualize = 0
-    root.percent.config(text = "Computing Registration")
+    # root.percent.config(text = "Computing Registration")
     root.update_idletasks()
     print("calling registration indirectly")
-    call_registration_indirectly(dataset, visualize)
+    refine=0
+    call_registration_indirectly(dataset, visualize, refine)
     root.percent.config(text = "Registration Complete")
     rospy.set_param('registration_done', 1)
     root.update_idletasks()

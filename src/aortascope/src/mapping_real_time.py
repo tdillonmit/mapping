@@ -22,6 +22,7 @@ import subprocess
 from collections import deque
 import gc
 # import snake as sn
+from keras.layers import TFSMLayer
 
 from voxblox import (
     BaseTsdfIntegrator,
@@ -110,16 +111,16 @@ class PointCloudUpdater:
             self.initialize_deeplumen_model()
 
         # philips
-        # self.image_width = rospy.get_param('/usb_cam/image_width', default=1280)
-        # self.image_height = rospy.get_param('/usb_cam/image_height', default=1024)
+        self.image_width = rospy.get_param('/usb_cam/image_width', default=1280)
+        self.image_height = rospy.get_param('/usb_cam/image_height', default=1024)
 
         # boston scientific avvigo
         # self.image_width = rospy.get_param('/usb_cam/image_width', default=1024)
         # self.image_height = rospy.get_param('/usb_cam/image_height', default=576)
 
         # boston scientific ilab 
-        self.image_width = rospy.get_param('/usb_cam/image_width', default=1280)
-        self.image_height = rospy.get_param('/usb_cam/image_height', default=1024)
+        # self.image_width = rospy.get_param('/usb_cam/image_width', default=1280)
+        # self.image_height = rospy.get_param('/usb_cam/image_height', default=1024)
 
         self.crop_radius=10
         no_points=rospy.get_param('no_points')
@@ -518,11 +519,28 @@ class PointCloudUpdater:
 
         if(self.deeplumen_lstm_on==1):
             
-            model = build_temporal_segmenter(time_steps=5, input_shape=(224, 224, 3), num_classes=3)
-            model.load_weights(self.model_path)
+            # model = build_temporal_segmenter(time_steps=5, input_shape=(224, 224, 3), num_classes=3, pretrained_encoder = None)
+            
+            # model.load_weights(self.model_path)
+
+            
+
+            # model = tf.keras.models.load_model(self.model_path)
+            model = TFSMLayer(self.model_path, call_endpoint="serving_default")
+           
+            
             # this makes compilation 20x faster!!
             model = tf.function(model, jit_compile=True)
             self.model = model
+
+        if(self.deeplumen_valve_on == 1):
+
+
+            DRN_inputs_3,DRN_outputs_3 = get_DRN_network()
+            model_cusp = tf.keras.Model(inputs=DRN_inputs_3, outputs=DRN_outputs_3)
+            model_cusp.load_weights( self.model_path_cusps)  
+            model_cusp = tf.function(model_cusp, jit_compile=True)
+            self.model_cusp = model_cusp
 
     def load_parameters(self, config_yaml):
 
@@ -549,7 +567,11 @@ class PointCloudUpdater:
 
         self.deeplumen_lstm_on = config_yaml['deeplumen_lstm_on']
 
+        self.deeplumen_valve_on = config_yaml['deeplumen_valve_on']
+
         self.model_path  = config_yaml['model_path']
+
+        self.model_path_cusps  = config_yaml['model_path_cusps']
 
         self.vpC_map = config_yaml['vpC_map']
 
@@ -719,14 +741,18 @@ class PointCloudUpdater:
             
             # print("TW_EM:", TW_EM)
 
-            time.sleep(0.1)
+            
 
             # TW_EM = np.eye(4)  # if you want to visualize only the image data
 
             # if(self.centre_data == 1):
             #     TW_EM =  average_transform @ em_transforms[i]
 
-            # grayscale_image = cv2.cvtColor(grayscale_image, cv2.COLOR_GRAY2BGR) 
+
+            
+
+            # for eves dataset
+            # time.sleep(0.1)
             grayscale_image = cv2.cvtColor(grayscale_image, cv2.COLOR_BGR2GRAY) 
 
             # grayscale_image=preprocess_ivus_image(grayscale_image, pc_updater.box_crop, pc_updater.circle_crop, pc_updater.text_crop, pc_updater.crosshairs_crop)
@@ -991,9 +1017,9 @@ class PointCloudUpdater:
         # TEMP BOSTON SCIENTIFIC!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!11
         
 
-        # for (grayscale_image, TW_EM, image_tag) in zip(self.image_batch, self.tw_em_batch, self.image_tags):
+        for (grayscale_image, TW_EM, image_tag) in zip(self.image_batch, self.tw_em_batch, self.image_tags):
 
-        for (grayscale_image, image_tag) in zip(self.image_batch, self.image_tags):
+        # for (grayscale_image, image_tag) in zip(self.image_batch, self.image_tags):
 
             # if i % save_frequency == 0:
             # Save the image
@@ -1005,10 +1031,10 @@ class PointCloudUpdater:
 
             # Save the TW_EM data
             
-            # tw_em_filename = f'{self.write_folder}/transform_data/TW_EM_{self.starting_index + image_tag -1}.npy'
-            # with open(tw_em_filename, 'wb') as f:
-            #     TW_EM = np.array(TW_EM, dtype=np.float64).reshape(4, 4)
-            #     np.save(f, TW_EM)
+            tw_em_filename = f'{self.write_folder}/transform_data/TW_EM_{self.starting_index + image_tag -1}.npy'
+            with open(tw_em_filename, 'wb') as f:
+                TW_EM = np.array(TW_EM, dtype=np.float64).reshape(4, 4)
+                np.save(f, TW_EM)
 
 
 
@@ -1359,6 +1385,8 @@ class PointCloudUpdater:
             if not hasattr(self, 'model'):
                 self.initialize_deeplumen_model()
 
+  
+
             
 
 
@@ -1638,63 +1666,63 @@ class PointCloudUpdater:
             TW_EM = None
 
 
-        # # temp for boston scientific
+        # ----- TEMP BOSTON SCIENTIFIC -----#
 
        
 
-        # run these functions once when triggered and update the visualizer accordingly
-        start_record = rospy.get_param('start_record', 0 )
-        if(start_record ==1):
-            self.start_recording()
-            rospy.set_param('start_record', 0)
+        # # run these functions once when triggered and update the visualizer accordingly
+        # start_record = rospy.get_param('start_record', 0 )
+        # if(start_record ==1):
+        #     self.start_recording()
+        #     rospy.set_param('start_record', 0)
 
-        save_dataset = rospy.get_param('save_data', 0 )
-        if(save_dataset ==1):
-            self.save_image_and_transform_data()
-            rospy.set_param('save_data', 0)
+        # save_dataset = rospy.get_param('save_data', 0 )
+        # if(save_dataset ==1):
+        #     self.save_image_and_transform_data()
+        #     rospy.set_param('save_data', 0)
     
-        rgb_image_data = np.frombuffer(msg.data, dtype=np.uint8)
+        # rgb_image_data = np.frombuffer(msg.data, dtype=np.uint8)
 
-        rgb_image = rgb_image_data.reshape((self.image_height, self.image_width, 3))
+        # rgb_image = rgb_image_data.reshape((self.image_height, self.image_width, 3))
 
-        rgb_image_msg = Image(
+        # rgb_image_msg = Image(
               
-                height=np.shape(rgb_image)[0],
-                width=np.shape(rgb_image)[1],
-                encoding='rgb8',
-                is_bigendian=False,
-                step=np.shape(rgb_image)[1] * 3,
-                data=rgb_image.tobytes()
-            )
-        self.rgb_image_pub.publish(rgb_image_msg)
+        #         height=np.shape(rgb_image)[0],
+        #         width=np.shape(rgb_image)[1],
+        #         encoding='rgb8',
+        #         is_bigendian=False,
+        #         step=np.shape(rgb_image)[1] * 3,
+        #         data=rgb_image.tobytes()
+        #     )
+        # self.rgb_image_pub.publish(rgb_image_msg)
 
 
-        if(self.record==1):
-            # code for saving images
+        # if(self.record==1):
+        #     # code for saving images
 
-            self.image_batch.append(rgb_image)
+        #     self.image_batch.append(rgb_image)
 
-            self.image_tags.append(self.image_number)
+        #     self.image_tags.append(self.image_number)
 
-            self.image_number = self.image_number+1
+        #     self.image_number = self.image_number+1
 
 
-        # reset memory for efficiency
-        if(self.record == 1):
-            if(len(self.image_batch)>150):
+        # # reset memory for efficiency
+        # if(self.record == 1):
+        #     if(len(self.image_batch)>150):
 
-                # consider using threading while saving to save time
-                self.quick_save()
+        #         # consider using threading while saving to save time
+        #         self.quick_save()
 
-                #clear the image batch and save the callback number
-                self.image_batch = []
-                self.image_tags = []
-                self.image_number = 1
+        #         #clear the image batch and save the callback number
+        #         self.image_batch = []
+        #         self.image_tags = []
+        #         self.image_number = 1
 
                 
 
 
-        # # end of temp
+        # ------- END OF TEMP BOSTON SCIENTIFIC ------#
 
        
         TW_EM=transform_stamped_to_matrix(TW_EM)
@@ -2006,11 +2034,32 @@ class PointCloudUpdater:
                 diff_time=end_time-start_time
                 print("segmentation time:", diff_time)
 
+                if(self.deeplumen_valve_on == 1):
+                    pred= deeplumen_segmentation(image,self.model_cusp)
+                    raw_data = pred[0].numpy()
+                    mask_1_opening, mask_2_cusp = post_process_deeplumen(raw_data)
+
+
+                    # get mask_2 as subtraction of mask_1_opening from mask_1
+                    # overwriting output from ML model!!
+                    
+                    # mask_2 = np.logical_and(mask_1 == 1, mask_1_opening == 0).astype(np.uint8)
+                    mask_2 = np.clip(mask_1 - mask_1_opening, 0, 1)
+                    mask_1 = mask_1_opening
+
+                    # cv2.imshow("mask 2 example", mask_2)
+                    # cv2.waitKey(0)
+
+                    
+
+
             
 
             if(self.deeplumen_lstm_on == 1):
 
                 # add most recent image to buffer
+                grayscale_image = cv2.resize(grayscale_image, (224, 224))
+                image = cv2.cvtColor(grayscale_image,cv2.COLOR_GRAY2RGB)
                 self.grayscale_buffer.append(image)
                 
                 # fetch sequence of images from buffer
@@ -2030,9 +2079,11 @@ class PointCloudUpdater:
                     end_time=time.time()
                     diff_time=end_time-start_time
                     print("segmentation time:", diff_time)
-            
+
                 else:
-                    mask_1,mask_2 = None,None
+                    return
+            
+                
 
          
 
