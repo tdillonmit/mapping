@@ -23,6 +23,12 @@ from collections import deque
 import gc
 # import snake as sn
 from keras.layers import TFSMLayer
+from tensorflow.keras.models import load_model
+from tensorflow.keras.layers import ReLU, Activation, TimeDistributed
+from segmentation_helpers import BlurPool
+
+# from segmentation_helpers import build_temporal_segmenter 
+
 
 from voxblox import (
     BaseTsdfIntegrator,
@@ -519,18 +525,58 @@ class PointCloudUpdater:
 
         if(self.deeplumen_lstm_on==1):
             
+            # 1 load weights separately h5
             # model = build_temporal_segmenter(time_steps=5, input_shape=(224, 224, 3), num_classes=3, pretrained_encoder = None)
-            
             # model.load_weights(self.model_path)
 
-            
+
+            # 2 load model h5
+            # model = load_model(self.model_path, compile=False)
+
+
+            # 3 load keras model
+            # custom_objects = {
+            #     'BlurPool': BlurPool,
+            #     'ReLU': tf.keras.layers.ReLU,
+            #     'Activation': tf.keras.layers.Activation,
+            #     'TimeDistributed': tf.keras.layers.TimeDistributed,
+            #     'DRN_TemporalSegmenter': build_temporal_segmenter,
+            # }
+
+            # model = tf.keras.models.load_model(self.model_path, custom_objects=custom_objects)
+
+            # model.save("model_full.keras")
+
+            # model = tf.keras.models.load_model(self.model_path, compile=False)
 
             # model = tf.keras.models.load_model(self.model_path)
+            # # (you can also immediately re‐compile if you want JIT/XLA:)
+            # model.compile(
+            #     optimizer="adam",
+            #     loss="sparse_categorical_crossentropy",
+            #     jit_compile=True
+            # )
+
+            
+            # 4 load savedmodel path
             model = TFSMLayer(self.model_path, call_endpoint="serving_default")
+
+
+            # 5 JIT METHOD
+            # imported = tf.saved_model.load(self.model_path)
+
+            # # 2) grab the “serving_default” signature
+            # serve_fn = imported.signatures["serving_default"]   # ConcreteFunction
+
+            # # 3) wrap that signature in a tf.function with XLA JIT if you want
+            # model = tf.function(serve_fn, jit_compile=True)
+
+            # store jit_model somewhere accessible (e.g. self.model = jit_model)
+            # self.model = model
            
             
             # this makes compilation 20x faster!!
-            model = tf.function(model, jit_compile=True)
+            # model = tf.function(model, jit_compile=True)
             self.model = model
 
         if(self.deeplumen_valve_on == 1):
@@ -695,10 +741,10 @@ class PointCloudUpdater:
         self.extend=1
         self.write_folder = rospy.get_param('dataset',0)
 
-        if(self.write_folder ==0):
+        if(self.write_folder == 0):
             self.write_folder = self.prompt_for_folder()
             
-        while(self.write_folder ==None):
+        while(self.write_folder == None):
             self.write_folder = self.prompt_for_folder()
 
         # for post processing of tracking data
@@ -706,21 +752,21 @@ class PointCloudUpdater:
         create_folder(folder_path)
 
         # load the images from the specified paths
-        # image_path = self.write_folder + '/grayscale_images/*.npy'
-        # sorted_images=sort_folder_string(image_path, "grayscale_image_")
-        # grayscale_images=load_numpy_data_from_folder(sorted_images)
+        image_path = self.write_folder + '/grayscale_images/*.npy'
+        sorted_images=sort_folder_string(image_path, "grayscale_image_")
+        grayscale_images=load_numpy_data_from_folder(sorted_images)
         
-        # if replaying just image data from old computer datasets
-        image_paths = sorted(glob.glob(os.path.join(self.write_folder, 'grayscale_images', '*.npy')))
-        grayscale_images = []
-        em_transforms = []
-        for image in image_paths:
-            grayscale_images.append(np.load(image))
-            em_transforms.append(np.eye(4))
+        # if replaying just image data from OLD COMPUTER datasets
+        # image_paths = sorted(glob.glob(os.path.join(self.write_folder, 'grayscale_images', '*.npy')))
+        # grayscale_images = []
+        # em_transforms = []
+        # for image in image_paths:
+        #     grayscale_images.append(np.load(image))
+        #     em_transforms.append(np.eye(4))
         
-        # transform_path = self.write_folder + '/transform_data/*.npy'
-        # sorted_transforms=sort_folder_string(transform_path, "TW_EM_")
-        # em_transforms=load_transform_data_from_folder(sorted_transforms)
+        transform_path = self.write_folder + '/transform_data/*.npy'
+        sorted_transforms=sort_folder_string(transform_path, "TW_EM_")
+        em_transforms=load_transform_data_from_folder(sorted_transforms)
 
         print("pulling from folder",self.write_folder  )
         print("number of loaded images:", len(grayscale_images))
@@ -753,7 +799,7 @@ class PointCloudUpdater:
 
             # for eves dataset
             # time.sleep(0.1)
-            grayscale_image = cv2.cvtColor(grayscale_image, cv2.COLOR_BGR2GRAY) 
+            # grayscale_image = cv2.cvtColor(grayscale_image, cv2.COLOR_BGR2GRAY) 
 
             # grayscale_image=preprocess_ivus_image(grayscale_image, pc_updater.box_crop, pc_updater.circle_crop, pc_updater.text_crop, pc_updater.crosshairs_crop)
 
@@ -2078,7 +2124,7 @@ class PointCloudUpdater:
 
                     end_time=time.time()
                     diff_time=end_time-start_time
-                    print("segmentation time:", diff_time)
+                    print("segmentation LSTM time:", diff_time)
 
                 else:
                     return
@@ -2757,15 +2803,15 @@ class PointCloudUpdater:
             # extrinsic_matrix_temp = np.eye(4)
             # extrinsic_matrix_temp[:3,3] = self.aortic_centreline[225, :]
 
-            print("extrinsic", extrinsic_matrix)
+            # print("extrinsic", extrinsic_matrix)
 
-            extrinsic_matrix_temp = np.asarray([[-0.29256042, -0.08216749, -0.95271029,  0.19205677],
-            [-0.94842493,  0.15210554,  0.27812596, -0.04631414],
-            [ 0.1220596,   0.98494285, -0.12242975, -0.06255438],
-            [ 0.,          0.,          0.,          1.        ]])
+            # extrinsic_matrix_temp = np.asarray([[-0.29256042, -0.08216749, -0.95271029,  0.19205677],
+            # [-0.94842493,  0.15210554,  0.27812596, -0.04631414],
+            # [ 0.1220596,   0.98494285, -0.12242975, -0.06255438],
+            # [ 0.,          0.,          0.,          1.        ]])
 
-            current_evar = predict_deploy(extrinsic_matrix_temp, self.aortic_centreline,self.lofted_cylinder,self.strut_geometry,self.strut_distances,self.evar_length, self.centreline_transforms, self.GD_centreline,self.evar_radius, self.fen_distances, self.fen_angles)
-            # current_evar = predict_deploy(extrinsic_matrix, self.aortic_centreline,self.lofted_cylinder,self.strut_geometry,self.strut_distances,self.evar_length, self.centreline_transforms, self.GD_centreline,self.evar_radius, self.fen_distances, self.fen_angles)
+            # current_evar = predict_deploy(extrinsic_matrix_temp, self.aortic_centreline,self.lofted_cylinder,self.strut_geometry,self.strut_distances,self.evar_length, self.centreline_transforms, self.GD_centreline,self.evar_radius, self.fen_distances, self.fen_angles)
+            current_evar = predict_deploy(extrinsic_matrix, self.aortic_centreline,self.lofted_cylinder,self.strut_geometry,self.strut_distances,self.evar_length, self.centreline_transforms, self.GD_centreline,self.evar_radius, self.fen_distances, self.fen_angles)
                 
             self.evar_graft.vertices = current_evar.vertices
             self.evar_graft.triangles = current_evar.triangles
