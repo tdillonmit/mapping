@@ -51,39 +51,73 @@ class RGBImageVisualizer:
         # bring_window_to_front(window_id)
 
 
+        # load the logo with alpha channel (PNG)
+
+        logo_rgba = cv2.imread('/home/tdillon/mapping/src/aortascope/aortascope_logo.png', cv2.IMREAD_UNCHANGED)
+        h0, w0 = logo_rgba.shape[:2]
+
+        # choose max logo width as 10% of your window width
+        max_logo_w = int(self.cv2_window_width * 0.1)
+        scale = max_logo_w / w0
+
+        # compute new dimensions, preserving aspect ratio
+        new_w = int(w0 * scale)
+        new_h = int(h0 * scale)
+
+        # resize
+        logo_rgba = cv2.resize(logo_rgba, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+        # split channels as before
+        self.logo_bgr   = logo_rgba[:, :, :3]
+        alpha_channel   = logo_rgba[:, :, 3] / 255.0
+        self.alpha_mask = cv2.merge([alpha_channel]*3)
+        self.logo_h, self.logo_w = new_h, new_w
+
+
 
     def rgb_image_callback(self, msg):
-        # Extract image data
-        width = msg.width
-        height = msg.height
+        # # Extract image data
+        # width = msg.width
+        # height = msg.height
 
-        try:
+        # try:
             
         
-            image_data  = np.frombuffer(msg.data, dtype=np.uint8).reshape((height, width, 3)) 
+        #     image_data  = np.frombuffer(msg.data, dtype=np.uint8).reshape((height, width, 3)) 
            
             
            
-        except:
-            print("failed to visualize incoming ros message!")
         # except:
-        #     # if rgb
+        #     print("failed to visualize incoming ros message!")
+        # # except:
+        # #     # if rgb
           
-        #     image_data  = np.frombuffer(msg.data, dtype=np.uint8).reshape((height, width, 3))
-        #     # image_data  = np.frombuffer(msg.data, dtype=np.uint8).reshape((height, -1)) 
+        # #     image_data  = np.frombuffer(msg.data, dtype=np.uint8).reshape((height, width, 3))
+        # #     # image_data  = np.frombuffer(msg.data, dtype=np.uint8).reshape((height, -1)) 
 
-        # Display the binary image
-        # cv2.imshow('Image', image_data)
+        # # Display the binary image
+        # # cv2.imshow('Image', image_data)
 
        
-        # cv2.imshow("ivus", image_data)
-        # cv2.namedWindow("IVUS Image", cv2.WINDOW_NORMAL)
-        # cv2.setWindowProperty("IVUS Image", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-        cv2.imshow("IVUS Image", cv2.resize(image_data, (self.cv2_window_height, self.cv2_window_width)))
-        cv2.waitKey(10)
-        cv2.moveWindow("IVUS Image", self.cv2_window_x, self.cv2_window_y)
+        # cv2.imshow("IVUS Image", cv2.resize(image_data, (self.cv2_window_height, self.cv2_window_width)))
+        # cv2.waitKey(10)
+        # cv2.moveWindow("IVUS Image", self.cv2_window_x, self.cv2_window_y)
         
-        print("ivusimage complete")
+
+        # unpack ROS image
+        h, w = msg.height, msg.width
+        frame = np.frombuffer(msg.data, dtype=np.uint8).reshape((h, w, 3))
+
+        # resize to your display size
+        disp = cv2.resize(frame, (self.cv2_window_width, self.cv2_window_height))
+
+        # 5) Simply overwrite the top‐left ROI with your logo
+        disp[0:self.logo_h, 0:self.logo_w] = self.logo_bgr
+
+        # show
+        cv2.imshow("IVUS Image", disp)
+        cv2.moveWindow("IVUS Image", self.cv2_window_x, self.cv2_window_y)
+        cv2.waitKey(10)
 
 
     def run(self):

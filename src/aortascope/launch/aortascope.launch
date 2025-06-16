@@ -9,6 +9,7 @@
   <!-- helpers -->
   <node name="mapping_parameters_gui" pkg="aortascope" type="mapping_parameters_gui.py" output="screen" />
   <node name="rgb_image_visualizer" pkg="aortascope" type="rgb_image_visualizer.py" output="screen" />
+  <node name="temp_check" pkg="aortascope" type="temp_check.py" output="screen" />
 
 
 

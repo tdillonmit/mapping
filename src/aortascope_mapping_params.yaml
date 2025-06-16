@@ -15,17 +15,21 @@ record_poses: 0
 tsdf_map : 1
 
 # ML segmentation
-deeplumen_on : 0
+deeplumen_on : 1
 # model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/full_inkbit_aorta_2/weights.weights.h5
 # model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/combined_dataset/weights.h5
-model_path: /home/tdillon/segmentation/deepivus_trained_models/ex_vivo_pigs_mgh/weights.weights.h5
-# model_path: /home/tdillon/segmentation/deepivus_trained_models/combined_inkbit_dataset/weights.weights.h5
+# model_path: /home/tdillon/segmentation/deepivus_trained_models/ex_vivo_pigs_mgh/weights.weights.h5
+model_path: /home/tdillon/segmentation/deepivus_trained_models/combined_inkbit_dataset/weights.weights.h5
+# model_path: /home/tdillon/segmentation/deepivus_trained_models/ex_vivo_pigs_with_pva/weights.weights.h5
 
-deeplumen_lstm_on : 1
+
+deeplumen_lstm_on : 0
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/ex_vivo_pigs_mgh_lstm/weights.h5
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/test_drive/model_full.keras
-model_path: /home/tdillon/segmentation/deepivus_trained_models/test_drive/model_full/model_full
+# model_path: /home/tdillon/segmentation/deepivus_trained_models/test_drive/model_full/model_full
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/test_drive/model_full.h5
+# model_path: /home/tdillon/segmentation/deepivus_trained_models/ex_vivo_pigs_mgh_imbalance/model_full/model_full
+# model_path: /home/tdillon/segmentation/deepivus_trained_models/ex_vivo_pigs_mgh_lstm_with_pva/model_full
 
 deeplumen_valve_on: 0
 model_path_cusps: /home/tdillon/segmentation/deepivus_trained_models/eve_train_2/weights.weights.h5
@@ -43,9 +47,10 @@ registered_ct_dataset: user_has_not_defined
 live_deformation: 0
 
 # double_display: 1
-double_display: 0
-test_image: 1
+double_display: 1
+test_image: 0
 test_transform: 0
+machine: philips
 
 
 

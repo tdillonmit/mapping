@@ -150,17 +150,17 @@ def save_refine():
     
     visualize = 0
     refine = 1
-    root.percent.config(text = "Refining Registration")
-    root.update_idletasks()
+    # root.percent.config(text = "Refining Registration")
+    # root.update_idletasks()
     print("calling refine indirectly")
     
     
     call_refine_indirectly(dataset, visualize, refine)
-    root.percent.config(text = "Refinement Complete")
+    # root.percent.config(text = "Refinement Complete")
 
     rospy.set_param("refinement_computed", 1)
     
-    root.update_idletasks()
+    # root.update_idletasks()
         
     
 
@@ -188,11 +188,12 @@ def start_pullback():
     """
     
     rospy.set_param("pullback", 1)
-    root.percent.config(text = "Calibrating ECG signal")
-    root.update_idletasks()
-    time.sleep(6)
-    root.percent.config(text = "Starting Pullback")
-    root.update_idletasks()
+    # root.percent.config(text = "Calibrating ECG signal")
+    # root.update_idletasks()
+    print("pullback set to 1")
+    time.sleep(1)
+    # root.percent.config(text = "Starting Pullback")
+    # root.update_idletasks()
     # pullback_check = rospy.get_param("pullback", 0)
     # print("pullback STARTED")
     # print("pullback check", pullback_check)

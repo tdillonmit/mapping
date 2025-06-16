@@ -291,8 +291,8 @@ def revised_fiducial_model_registration(model, fiducial_1,reference_1, em_frame)
     # consider it calibrating the string phantom itself
 
     # the probe isnt perfectly straight when mounted due to drill hole
-    prerotation=(3.25)*(np.pi/180) 
-    # prerotation=(0)*(np.pi/180) 
+    # prerotation=(3.25)*(np.pi/180) 
+    prerotation=(0)*(np.pi/180) 
 
     angle_radians=angle_radians+prerotation
     angle_radians = - angle_radians
@@ -402,7 +402,9 @@ class PointCloudUpdater:
         radial_offset = rospy.get_param('radial_offset')
         oclock = rospy.get_param('oclock')
 
-        self.machine='boston_scientific'
+        # self.machine='boston_scientific'
+
+        self.machine='philips'
 
 
         # Define parameter names and default values

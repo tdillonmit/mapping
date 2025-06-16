@@ -47,36 +47,6 @@ from tkinter import filedialog
 
 
 
-def get_gpu_temp():
-
-    result = subprocess.run(['nvidia-smi', '--query-gpu=temperature.gpu', '--format=csv,noheader,nounits'],
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    print("GPU temp:", int(result.stdout.strip()))
-
-# def get_cpu_temp():
- 
-#     result = subprocess.run(['sensors'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-#     print(result.stdout)
-#     # for line in result.stdout.split('\n'):
-#     #     if 'Package id 0' in line:  # For Intel CPUs
-#     #         temp = float(line.split('+')[1].split('°C')[0])
-#     #         print("CPU temp:", temp)
-
-# def get_cpu_temp():
-#     result = subprocess.run(['sensors'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    
-#     inside_coretemp_block = False
-    
-#     for line in result.stdout.split('\n'):
-#         if 'coretemp-isa-0000' in line:
-#             inside_coretemp_block = True
-#         elif inside_coretemp_block and line.strip() == '':
-#             # Stop when you reach an empty line (indicating the next block)
-#             break
-#         if inside_coretemp_block:
-#             print(line)
-
-
 
     
 
@@ -86,8 +56,10 @@ def get_gpu_temp():
 class PointCloudUpdater:
 
 
+            
 
     def __init__(self):
+
 
         
         self.dissection_mapping = 0
@@ -239,39 +211,67 @@ class PointCloudUpdater:
 
         self.minimum_thickness = 15
 
+        if(self.machine == 'philips'):
+            # CROP IMAGE
+            start_x=59
+            end_x=840
+            start_y=10
+            end_y=790
+            self.box_crop=[start_x,end_x,start_y,end_y]
 
-        # CROP IMAGE
-        start_x=59
-        end_x=840
-        start_y=10
-        end_y=790
-        self.box_crop=[start_x,end_x,start_y,end_y]
+            # CROP TEXT AT TOP
+            text_start_x=393
+            text_end_x=440
+            text_start_y=0
+            text_end_y=15
+            self.text_crop=[text_start_x,text_start_y,text_end_x,text_end_y]
+            
+            # DEFINE NEW PARAMETERS
+            self.new_height=end_x-start_x
+            self.new_width=end_y-start_y
+            self.centre_x=int(self.new_height/2)
+            self.centre_y=int(self.new_width/2)
 
-        # CROP TEXT AT TOP
-        text_start_x=393
-        text_end_x=440
-        text_start_y=0
-        text_end_y=15
-        self.text_crop=[text_start_x,text_start_y,text_end_x,text_end_y]
-        
-        # DEFINE NEW PARAMETERS
-        self.new_height=end_x-start_x
-        self.new_width=end_y-start_y
-        self.centre_x=int(self.new_height/2)
-        self.centre_y=int(self.new_width/2)
+            # CROP WIRE
+            radius_wire=60
+            self.wire_crop=make_wire_crop(self.new_height,self.new_width,self.centre_x,self.centre_y, radius_wire)
+            # self.circle_crop=make_circle_crop(new_height,new_width,centre_x,centre_y)
+            
+            # GET RID OF CROSSHAIRS
+            crosshair_width=5
+            crosshair_height=2
+            crosshair_vert_coordinates=[[380,62],[380,128],[380,193],[380,259],[380,324],[394,455],[394,520],[394,585],[394,651],[394,717]]
+            crosshair_horiz_coordinates=[[61,395],[127,395],[192,395],[258,395],[323,395],[454,381],[519,381],[585,381],[650,381],[716,381]]
+            self.crosshairs_crop=make_crosshairs_crop(self.new_height,self.new_width,crosshair_width,crosshair_height,crosshair_vert_coordinates,crosshair_horiz_coordinates)
+            self.circle_crop=make_circle_crop(self.new_height,self.new_width,self.centre_x,self.centre_y)
 
-        # CROP WIRE
-        radius_wire=60
-        self.wire_crop=make_wire_crop(self.new_height,self.new_width,self.centre_x,self.centre_y, radius_wire)
-        # self.circle_crop=make_circle_crop(new_height,new_width,centre_x,centre_y)
-        
-        # GET RID OF CROSSHAIRS
-        crosshair_width=5
-        crosshair_height=2
-        crosshair_vert_coordinates=[[380,62],[380,128],[380,193],[380,259],[380,324],[394,455],[394,520],[394,585],[394,651],[394,717]]
-        crosshair_horiz_coordinates=[[61,395],[127,395],[192,395],[258,395],[323,395],[454,381],[519,381],[585,381],[650,381],[716,381]]
-        self.crosshairs_crop=make_crosshairs_crop(self.new_height,self.new_width,crosshair_width,crosshair_height,crosshair_vert_coordinates,crosshair_horiz_coordinates)
-        self.circle_crop=make_circle_crop(self.new_height,self.new_width,self.centre_x,self.centre_y)
+        if(self.machine=='boston_scientific'):
+            start_y=337  # note order of y and x flipped relative to philips
+            end_y=1133
+            start_x=62
+            end_x=858
+            self.box_crop=[start_x,end_x,start_y,end_y]
+
+            text_start_y=990
+            text_end_y=783
+            text_start_x=1138
+            text_end_x=855
+            self.text_crop=[text_start_x,text_start_y,text_end_x,text_end_y]
+            
+            self.new_height=end_x-start_x
+            self.new_width=end_y-start_y
+            self.centre_x=int(self.new_height/2)
+            self.centre_y=int(self.new_width/2)
+            
+            crosshair_width=0
+            crosshair_height=0
+            crosshair_vert_coordinates=[[self.centre_x, self.centre_y]]
+            crosshair_horiz_coordinates=[[self.centre_x, self.centre_y]]
+            self.crosshairs_crop=make_crosshairs_crop(self.new_height,self.new_width,crosshair_width,crosshair_height,crosshair_vert_coordinates,crosshair_horiz_coordinates)
+
+            radius_wire=36
+            self.wire_crop=make_wire_crop(self.new_height,self.new_width,self.centre_x,self.centre_y, radius_wire)
+            self.circle_crop=make_circle_crop(self.new_height,self.new_width,self.centre_x,self.centre_y)
 
         
         # BUFFER INITIALIZATION
@@ -576,7 +576,7 @@ class PointCloudUpdater:
            
             
             # this makes compilation 20x faster!!
-            # model = tf.function(model, jit_compile=True)
+            model = tf.function(model, jit_compile=True)
             self.model = model
 
         if(self.deeplumen_valve_on == 1):
@@ -645,6 +645,8 @@ class PointCloudUpdater:
         self.test_image = config_yaml['test_image']
 
         self.test_transform = config_yaml['test_transform']
+
+        self.machine = config_yaml['machine']
 
         # ---- LOAD ROS PARAMETERS ------ #
         param_names = ['/angle', '/translation','/scaling','/threshold','/no_points','/crop_index','/radial_offset','/oclock', '/constraint_radius','/pullback']
@@ -1047,9 +1049,9 @@ class PointCloudUpdater:
 
         print("finished saving images, transform and ecg data (if present)!")
 
-        
-
-
+        # turn off the pullback device
+        rospy.set_param('pullback', 0)
+        print("pullback device stopped")
 
         return
 
@@ -1181,6 +1183,7 @@ class PointCloudUpdater:
 
     def load_registetered_ct(self):
 
+        no_reg=0
 
         print("loading registration lineset")
         self.registered_ct_lineset = o3d.io.read_line_set(self.write_folder+ '' + '/final_registration.ply')
@@ -1191,6 +1194,66 @@ class PointCloudUpdater:
             self.registered_ct_lineset = o3d.io.read_line_set(self.write_folder+ '' + '/final_registration_refine.ply')
             print("loading registration mesh")
             self.registered_ct_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/final_registration_mesh_refine.ply')
+
+        # TSDF LOAD MODULES
+        if self.registered_ct_mesh is None or len(self.registered_ct_mesh.vertices) == 0 or len(self.registered_ct_mesh.triangles) == 0:
+
+            self.ct_centroids = np.load(self.write_folder + '/ivus_centroids.npy')
+            self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.004, 20, [0,1,0])
+
+            self.registered_ct_lineset.paint_uniform_color([0,0,0])
+
+            self.registered_ct_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/tsdf_mesh_near_lumen.ply')
+            self.registered_ct_mesh_2 = copy.deepcopy(self.registered_ct_mesh)
+            self.registered_ct_mesh_2.compute_vertex_normals()
+
+            # DELETED FOR FEVAR
+            self.vis2.add_geometry(self.ct_spheres)
+            self.registered_ct_mesh_2.paint_uniform_color([1,0,0])
+            self.vis2.add_geometry(self.registered_ct_mesh_2)
+            self.vis2.add_geometry(self.tracker)
+
+            
+            # self.vis.remove_geometry(self.catheter)
+
+            self.registered_ct_lineset = create_wireframe_lineset_from_mesh(self.registered_ct_mesh)
+            self.vis.add_geometry(self.registered_ct_lineset)
+
+            # DELETED FOR FEVAR
+            # self.vis.add_geometry(self.ct_spheres)
+
+            print("LOADING TSDF MESH ONLY!!")
+
+    
+            # Get current camera parameters
+            view_control_1 = self.vis.get_view_control()
+
+            view_control_1.set_up([0,-1,0])
+
+            view_control_1.set_front([0,0,-1])
+            
+
+            view_control_1.set_zoom(0.25)
+            
+            return
+
+        ct_centroid_pc = o3d.io.read_point_cloud(self.write_folder + '/side_branch_centrelines.ply')
+        if(self.refine==1):
+            ct_centroid_pc = o3d.io.read_point_cloud(self.write_folder + '/side_branch_centrelines_refine.ply')
+
+        self.centerline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc.ply')
+        if(self.refine==1):
+            self.centerline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc_refine.ply')
+
+        
+
+
+        # self.ct_centroids = np.load(self.write_folder + '/ct_centroids.npy')
+        # NOte that ivus centroids have been used here!!!
+        self.ct_centroids = np.load(self.write_folder + '/ivus_centroids.npy')
+
+
+        
 
 
         self.registered_ct_mesh.remove_unreferenced_vertices()
@@ -1222,22 +1285,14 @@ class PointCloudUpdater:
         print("computed coarse to fine mesh node mapping")
 
 
-        ct_centroid_pc = o3d.io.read_point_cloud(self.write_folder + '/side_branch_centrelines.ply')
-
-        if(self.refine==1):
-            ct_centroid_pc = o3d.io.read_point_cloud(self.write_folder + '/side_branch_centrelines_refine.ply')
         self.constraint_locations = np.asarray(ct_centroid_pc.points)
-        # self.ct_centroids = np.load(self.write_folder + '/ct_centroids.npy')
-
-        # NOte that ivus centroids have been used here!!!
-        self.ct_centroids = np.load(self.write_folder + '/ivus_centroids.npy')
+        
+        
         # self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.00225, 20, [0,1,0])
         self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.004, 20, [0,1,0])
         self.knn_idxs_spheres, self.knn_weights_spheres = precompute_knn_mapping(self.registered_ct_mesh, self.ct_centroids, k=5)
 
-        self.centerline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc.ply')
-        if(self.refine==1):
-            self.centerline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc_refine.ply')
+    
 
         # # SMOOTHING MESH AS IMPORTED!! - not anymore
         # self.registered_ct_mesh = self.registered_ct_mesh.filter_smooth_taubin(number_of_iterations=10)
@@ -1447,14 +1502,18 @@ class PointCloudUpdater:
         # just switch the transform you fetch
         if(self.dest_frame == 'target1'):
 
-
+            print("switching")
             self.dest_frame = 'target2'
+
+            # turn off ML components
             self.deeplumen_on = 0
             self.deeplumen_lstm_on = 0
-            self.live_deformation = 0
+         
 
         elif (self.dest_frame == 'target2'):
             self.dest_frame = 'target1'
+
+       
 
 
   
@@ -1535,6 +1594,10 @@ class PointCloudUpdater:
 
         # initialize tracking type code
         self.refine=1
+
+        # get rid of old geometry
+        self.vis2.remove_geometry(self.registered_ct_mesh_2)
+        self.vis.remove_geometry(self.registered_ct_lineset)
         self.tracking()
 
         self.tsdf_map = 0
@@ -1653,7 +1716,9 @@ class PointCloudUpdater:
         rospy.signal_shutdown('User quitted')
 
     
-        
+    def image_pause(self):
+        print("CPU OVERHEATING, PAUSING FOR 15 SECONDS, TEMP ABOVE 90C")
+        time.sleep(15)
 
 
     def ecg_callback(self,ecg_msg):
@@ -1792,12 +1857,12 @@ class PointCloudUpdater:
 
         # TEST IMAGE test_image
         #circular test image
-        rgb_image = np.zeros((self.image_height, self.image_width, 3), dtype=np.uint8)
-        center = (self.centre_x, self.centre_y)  # (x, y) coordinates of the circle center
-        radius = int(self.centre_x/2)  # Radius of the circle
-        color = (255, 255, 255)  # White color in BGR format
-        thickness = 5  # -1 to fill the circle, >0 for border thickness
-        cv2.circle(rgb_image, center, radius, color, thickness)
+        # rgb_image = np.zeros((self.image_height, self.image_width, 3), dtype=np.uint8)
+        # center = (self.centre_x, self.centre_y)  # (x, y) coordinates of the circle center
+        # radius = int(self.centre_x/2)  # Radius of the circle
+        # color = (255, 255, 255)  # White color in BGR format
+        # thickness = 5  # -1 to fill the circle, >0 for border thickness
+        # cv2.circle(rgb_image, center, radius, color, thickness)
 
         
       
@@ -1926,6 +1991,12 @@ class PointCloudUpdater:
             self.tracking()
             rospy.set_param('registration_done', 0)
 
+        pause = rospy.get_param('/global_pause', 0)
+        if(pause==1):
+            print("detected temp rise")
+            self.image_pause()
+            rospy.set_param('/global_pause', 0)
+
         switch_probe = rospy.get_param('switch_probe', 0)
         if(switch_probe == 1):
             self.switch_probe_view()
@@ -1966,7 +2037,7 @@ class PointCloudUpdater:
         # ------ FIRST RETURN SEGMENTATION -------- #
 
         # first return segmentation
-        if(self.deeplumen_on == 0 and self.deeplumen_lstm_on == 0 and self.dest_frame == 'target1'):
+        if(self.deeplumen_on == 0 and self.deeplumen_lstm_on == 0):
 
             relevant_pixels=first_return_segmentation(grayscale_image,threshold, crop_index,self.gridlines)
             relevant_pixels=np.asarray(relevant_pixels).squeeze()
@@ -2603,14 +2674,26 @@ class PointCloudUpdater:
                 far_vpC_points.colors = o3d.utility.Vector3dVector(duplicated_pass_colors)
 
 
-                if(self.extend == 1 and self.dissection_mapping == 1):
-                # if(self.extend == 1):
-                #     # prevent memory issues by commenting this out
+                # if(self.extend == 1 and self.dissection_mapping == 1):
+                # # if(self.extend == 1):
+                # #     # prevent memory issues by commenting this out
+                #     self.volumetric_far_point_cloud.points.extend(far_vpC_points.points)
+                #     self.volumetric_far_point_cloud.colors.extend(far_vpC_points.colors)
+                # else:
+                #     self.volumetric_far_point_cloud.points = far_vpC_points.points
+                #     self.volumetric_far_point_cloud.colors = far_vpC_points.colors
+
+
+                if(self.extend == 1):
+
                     self.volumetric_far_point_cloud.points.extend(far_vpC_points.points)
                     self.volumetric_far_point_cloud.colors.extend(far_vpC_points.colors)
+
                 else:
                     self.volumetric_far_point_cloud.points = far_vpC_points.points
                     self.volumetric_far_point_cloud.colors = far_vpC_points.colors
+
+                    
 
 
                 # OVERRIDE BRANCH PASS COLOURING
