@@ -57,7 +57,7 @@ class RGBImageVisualizer:
         h0, w0 = logo_rgba.shape[:2]
 
         # choose max logo width as 10% of your window width
-        max_logo_w = int(self.cv2_window_width * 0.1)
+        max_logo_w = int(self.cv2_window_width * 0.25)
         scale = max_logo_w / w0
 
         # compute new dimensions, preserving aspect ratio
@@ -112,7 +112,7 @@ class RGBImageVisualizer:
         disp = cv2.resize(frame, (self.cv2_window_width, self.cv2_window_height))
 
         # 5) Simply overwrite the top‐left ROI with your logo
-        disp[0:self.logo_h, 0:self.logo_w] = self.logo_bgr
+        # disp[0:self.logo_h, 0:self.logo_w] = self.logo_bgr
 
         # show
         cv2.imshow("IVUS Image", disp)

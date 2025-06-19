@@ -12,6 +12,7 @@ import copy
 from std_msgs.msg import Header  
 from std_msgs.msg import Int32
 from tf2_msgs.msg import TFMessage
+from std_msgs.msg import Bool
 import math
 import yaml
 import os
@@ -59,6 +60,10 @@ class PointCloudUpdater:
             
 
     def __init__(self):
+
+
+        now = rospy.Time.now()
+        self.last_image_time = now
 
 
         
@@ -430,6 +435,40 @@ class PointCloudUpdater:
         self.replay_data = 0
 
 
+        # replaced rosparam polling with subscribers for efficiency
+        rospy.Subscriber('/start_record', Bool, self.start_record_cb)
+        rospy.Subscriber('/save_data', Bool, self.save_data_cb)
+        rospy.Subscriber('/gate', Bool, self.gate_cb)
+        rospy.Subscriber('/funsr_start', Bool, self.funsr_start_cb)
+        rospy.Subscriber('/funsr_complete', Bool, self.funsr_complete_cb)
+        rospy.Subscriber('/registration_started', Bool, self.registration_started_cb)
+        rospy.Subscriber('/registration_done', Bool, self.registration_done_cb)
+        rospy.Subscriber('/global_pause', Bool, self.global_pause_cb)
+        rospy.Subscriber('/switch_probe', Bool, self.switch_probe_cb)
+        rospy.Subscriber('/refine_started', Bool, self.refine_started_cb)
+        rospy.Subscriber('/refine_done', Bool, self.refine_done_cb)
+        rospy.Subscriber('/sim_device', Bool, self.sim_device_cb)
+        rospy.Subscriber('/shutdown', Bool, self.shutdown_cb)
+        rospy.Subscriber('/pullback', Int32, self.pullback_cb)
+        rospy.Subscriber('/replay', Bool, self.replay_cb)
+
+        self.start_record = False
+        self.save_data = False
+        self.gate = False
+        self.funsr_start = False
+        self.funsr_complete = False
+        self.registration_start = False
+        self.reg_complete = False
+        self.pause = False
+        self.switch_probe = False
+        self.refine_start = False
+        self.refine_complete = False
+        self.sim_device = False
+        self.shutdown = False
+        self.pullback = 0  # Int32
+        self.replay = False
+
+
         # FRAME GRABBER AND EM SIMULATOR
         if self.test_image == 1:
             rospy.loginfo("Test image mode active — starting mock publisher.")
@@ -486,16 +525,23 @@ class PointCloudUpdater:
                 time.sleep(0.015)
 
 
-                
-
-     
-
+    # for efficiency rather than rosparam polling
+    def start_record_cb(self, msg):        self.start_record = msg.data
+    def save_data_cb(self, msg):           self.save_data = msg.data
+    def gate_cb(self, msg):                self.gate = msg.data
+    def funsr_start_cb(self, msg):         self.funsr_start = msg.data
+    def funsr_complete_cb(self, msg):      self.funsr_complete = msg.data
+    def registration_started_cb(self, msg):self.registration_started = msg.data
+    def registration_done_cb(self, msg):   self.reg_complete = msg.data
+    def global_pause_cb(self, msg):        self.pause = msg.data
+    def switch_probe_cb(self, msg):        self.switch_probe = msg.data
+    def refine_started_cb(self, msg):      self.refine_start = msg.data
+    def refine_done_cb(self, msg):         self.refine_complete = msg.data
+    def sim_device_cb(self, msg):          self.sim_device = msg.data
+    def shutdown_cb(self, msg):            self.shutdown = msg.data
+    def pullback_cb(self, msg):            self.pullback = msg.data
+    def replay_cb(self, msg):              self.replay = msg.data
     
-
-
-        
-
-        
 
     def initialize_deeplumen_model(self):
         
@@ -525,55 +571,11 @@ class PointCloudUpdater:
 
         if(self.deeplumen_lstm_on==1):
             
-            # 1 load weights separately h5
-            # model = build_temporal_segmenter(time_steps=5, input_shape=(224, 224, 3), num_classes=3, pretrained_encoder = None)
-            # model.load_weights(self.model_path)
-
-
-            # 2 load model h5
-            # model = load_model(self.model_path, compile=False)
-
-
-            # 3 load keras model
-            # custom_objects = {
-            #     'BlurPool': BlurPool,
-            #     'ReLU': tf.keras.layers.ReLU,
-            #     'Activation': tf.keras.layers.Activation,
-            #     'TimeDistributed': tf.keras.layers.TimeDistributed,
-            #     'DRN_TemporalSegmenter': build_temporal_segmenter,
-            # }
-
-            # model = tf.keras.models.load_model(self.model_path, custom_objects=custom_objects)
-
-            # model.save("model_full.keras")
-
-            # model = tf.keras.models.load_model(self.model_path, compile=False)
-
-            # model = tf.keras.models.load_model(self.model_path)
-            # # (you can also immediately re‐compile if you want JIT/XLA:)
-            # model.compile(
-            #     optimizer="adam",
-            #     loss="sparse_categorical_crossentropy",
-            #     jit_compile=True
-            # )
-
             
             # 4 load savedmodel path
             model = TFSMLayer(self.model_path, call_endpoint="serving_default")
 
 
-            # 5 JIT METHOD
-            # imported = tf.saved_model.load(self.model_path)
-
-            # # 2) grab the “serving_default” signature
-            # serve_fn = imported.signatures["serving_default"]   # ConcreteFunction
-
-            # # 3) wrap that signature in a tf.function with XLA JIT if you want
-            # model = tf.function(serve_fn, jit_compile=True)
-
-            # store jit_model somewhere accessible (e.g. self.model = jit_model)
-            # self.model = model
-           
             
             # this makes compilation 20x faster!!
             model = tf.function(model, jit_compile=True)
@@ -710,7 +712,8 @@ class PointCloudUpdater:
         self.test_transform = 0
 
 
-        rospy.set_param('replay', 0)
+        # rospy.set_param('replay', 0)
+
         # clear view of any geometries
         try:
             self.vis.remove_geometry(self.processed_centreline)
@@ -917,7 +920,7 @@ class PointCloudUpdater:
 
     def registration_started(self):
 
-        rospy.set_param('registration_started', 0)
+        # rospy.set_param('registration_started', 0)
         self.write_folder = rospy.get_param('dataset', 0)
         self.deeplumen_on = 0
         self.deeplumen_lstm_on = 0
@@ -929,9 +932,9 @@ class PointCloudUpdater:
         gc.collect()
         
         print("cleared session!")
-        registration_done = 0
-        while(registration_done ==0):
-            registration_done = rospy.get_param('registration_done', 0)
+       
+        while(self.registration_done ==0):
+            # registration_done = rospy.get_param('registration_done', 0)
             time.sleep(1)
 
 
@@ -1050,8 +1053,8 @@ class PointCloudUpdater:
         print("finished saving images, transform and ecg data (if present)!")
 
         # turn off the pullback device
-        rospy.set_param('pullback', 0)
-        print("pullback device stopped")
+        # rospy.set_param('pullback', 0)
+        # print("pullback device stopped")
 
         return
 
@@ -1576,17 +1579,17 @@ class PointCloudUpdater:
 
     def call_refine_reg(self):
 
-        rospy.set_param('refine_started', 0)
+
 
         self.save_refine_data()
 
         print("saved refine data!")
 
-        refine_done = rospy.get_param('refinement_computed', 0)
+    
 
-        while(refine_done ==0):
+        while(self.refine_done ==0):
 
-            refine_done = rospy.get_param('refinement_computed', 0)
+            # refine_done = rospy.get_param('refinement_computed', 0)
             print("waiting for refinement to compute...")
             time.sleep(1)
 
@@ -1742,12 +1745,23 @@ class PointCloudUpdater:
         
     def image_callback(self, msg):
 
+        now = rospy.Time.now()
+        delta = now - self.last_image_time  
+        print("rospy difference time", delta.to_sec())
+        if delta < rospy.Duration(0.02):  # max ~50 Hz
+            print("throttling to cool CPU!")
+            return
+        self.last_image_time = now
+
+        # self.start_entire = time.time()
+
         
 
-        self.replay_data = rospy.get_param('replay', 0 )
+        # self.replay_data = rospy.get_param('replay', 0 )
         if(self.replay_data ==1):
             self.replay()
-            rospy.set_param('replay', 0)
+            self.replay_data = 0
+            # rospy.set_param('replay', 0)
 
         # print("self.replay data", self.replay_data)
         # if(self.replay_data==1):
@@ -1954,80 +1968,61 @@ class PointCloudUpdater:
 
         # GUI LOGIC
         # run these functions once when triggered and update the visualizer accordingly
-        start_record = rospy.get_param('start_record', 0 )
-        if(start_record ==1):
+        if self.start_record:
             self.start_recording()
-            rospy.set_param('start_record', 0)
+            self.start_record = False  # reset flag
 
-        save_dataset = rospy.get_param('save_data', 0 )
-        if(save_dataset ==1):
+        if self.save_data:
             self.save_image_and_transform_data()
-            rospy.set_param('save_data', 0)
+            self.save_data = False
 
-        gate_button = rospy.get_param('gate', 0 )
-        if(gate_button ==1):
+        if self.gate:
             self.gate_data()
-            rospy.set_param('gate', 0)
+            self.gate = False
 
-        
-
-        funsr_start = rospy.get_param('funsr_started', 0)
-        if(funsr_start == 1):
+        if self.funsr_start:
             self.funsr_started()
-            rospy.set_param('funsr_started', 0)
+            self.funsr_start = False
 
-        funsr_complete = rospy.get_param('funsr_done', 0)
-        if(funsr_complete == 1):
+        if self.funsr_complete:
             self.funsr_done()
-            rospy.set_param('funsr_done', 0)
+            self.funsr_complete = False
 
-        registration_start = rospy.get_param('registration_started', 0)
-        if(registration_start == 1):
+        if self.registration_start:
             self.registration_started()
-            rospy.set_param('registration_started', 0)
+            self.registration_start = False
 
-        reg_complete = rospy.get_param('registration_done', 0)
-        if(reg_complete == 1):
+        if self.reg_complete:
             self.tracking()
-            rospy.set_param('registration_done', 0)
+            self.reg_complete = False
 
-        pause = rospy.get_param('/global_pause', 0)
-        if(pause==1):
+        if self.pause:
             print("detected temp rise")
             self.image_pause()
-            rospy.set_param('/global_pause', 0)
+            self.pause = False
 
-        switch_probe = rospy.get_param('switch_probe', 0)
-        if(switch_probe == 1):
+        if self.switch_probe:
             self.switch_probe_view()
-            rospy.set_param('switch_probe', 0)
+            self.switch_probe = False
 
-        refine_start = rospy.get_param('refine_started', 0)
-        if(refine_start == 1):
+        if self.refine_start:
             self.refine_record()
-            rospy.set_param('refine_started', 0)
+            self.refine_start = False
 
-        refine_complete = rospy.get_param('refine_done', 0)
-        if(refine_complete == 1):
+        if self.refine_complete:
             self.call_refine_reg()
-            rospy.set_param('refine_done', 0)
+            self.refine_complete = False
 
-        sim_device= rospy.get_param('sim_device', 0 )
-        if(sim_device ==1):
+        if self.sim_device:
             self.simulate_device()
-            rospy.set_param('sim_device',0)
+            self.sim_device = False
 
-        shutdown = rospy.get_param('shutdown', 0 )
-        if(shutdown ==1):
-            self.close_app()
-
-
-        # stop
-        
 
         # interact with hardware over rospy
         # pullback = rospy.get_param('pullback', 0)
         # self.pullback_pub.publish(pullback)
+
+
 
         centre_x=self.centre_x
         centre_y=self.centre_y
@@ -2277,6 +2272,8 @@ class PointCloudUpdater:
 
                 if nearest_indices.size > 0:
 
+                    start_raycast = time.time()
+
                     contiguous_indices, contiguous_block_points = get_contiguous_block_from_contour(contour_points, nearest_indices)
 
                     orifice_mask = mask_2
@@ -2286,6 +2283,11 @@ class PointCloudUpdater:
                     normals = visualize_contour_normals(orifice_mask, contour_points)
                 
                     raycast_hits, ray_lengths = compute_branch_raycast_hits(mask_2, contour_points, normals)
+
+                    end_raycast = time.time()
+                    diff_raycast = end_raycast - start_raycast
+
+                    print("raycasting operations time:", end_raycast)
 
                     mid_index = len(raycast_hits) // 2
 
@@ -2958,6 +2960,10 @@ class PointCloudUpdater:
 
         self.vis.poll_events()
         self.vis.update_renderer()
+
+        # stop_entire = time.time()
+        # diff_entire = stop_entire - self.start_entire
+        # print("entire loop time", diff_entire)
 
     
             

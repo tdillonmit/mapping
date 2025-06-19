@@ -10,38 +10,53 @@ import concurrent.futures
 from deformation_helpers import *
 from gating_helpers import *
 sys.path.append("/home/tdillon/FUNSR")
+from std_msgs.msg import Bool
 
-def close_gui():
-    root.quit()
-    root.destroy()
 
-def select_folder():
+# publishers for each of the buttons
+start_record_pub         = rospy.Publisher('/start_record', Bool, queue_size=1)
+save_data_pub            = rospy.Publisher('/save_data', Bool, queue_size=1)
+gate_pub                 = rospy.Publisher('/gate', Bool, queue_size=1)
+funsr_start_pub          = rospy.Publisher('/funsr_start', Bool, queue_size=1)
+funsr_complete_pub       = rospy.Publisher('/funsr_complete', Bool, queue_size=1)
+registration_started_pub = rospy.Publisher('/registration_started', Bool, queue_size=1)
+registration_done_pub    = rospy.Publisher('/registration_done', Bool, queue_size=1)
+global_pause_pub         = rospy.Publisher('/global_pause', Bool, queue_size=1)
+switch_probe_pub         = rospy.Publisher('/switch_probe', Bool, queue_size=1)
+refine_started_pub       = rospy.Publisher('/refine_started', Bool, queue_size=1)
+refine_done_pub          = rospy.Publisher('/refine_done', Bool, queue_size=1)
+sim_device_pub           = rospy.Publisher('/sim_device', Bool, queue_size=1)
+shutdown_pub             = rospy.Publisher('/shutdown', Bool, queue_size=1)
+pullback_pub             = rospy.Publisher('/pullback', Int32, queue_size=1)
+replay_pub               = rospy.Publisher('/replay', Bool, queue_size=1)
 
-    initial_dir = os.path.expanduser("/home/tdillon/datasets")
 
-    folder_path = filedialog.askdirectory(initialdir=initial_dir,title = 'Select Folder')  # Open folder selection dialog
-   
-    if folder_path:  # If a folder is selected
-        print(f"Selected folder: {folder_path}")
-        rospy.set_param("dataset", folder_path)
-        folder_prompt.config(text=f"{folder_path}")  # Update label with the selected folder
-    else:
-        print("No folder selected")
-        folder_prompt.config(text="No folder selected")  # Update label with default message
+
 
 def start_record():
-    
-    rospy.set_param("start_record", 1)
-   
+    start_record_pub.publish(True)
+
 def save_data():
-    
-    rospy.set_param("save_data", 1)
+    save_data_pub.publish(True)
+    pullback_pub.publish(1)
+
+def call_gating():
+    gate_pub.publish(True)
+
+    time.sleep(1)
+    #complete this function
+    dataset = rospy.get_param('dataset', 0)
+    if(dataset ==0):
+        select_folder()
+    dataset = rospy.get_param('dataset', 0)
+
+    run_gating(dataset)
+    # root.percent.config(text = "Gating Complete")
+    # root.update_idletasks()
 
 def call_funsr():
-    
-    print("Surface Extraction module called!")
-    rospy.set_param("funsr_started", 1)
-    dataset = rospy.get_param('dataset', 0)
+    funsr_start_pub.publish(True)
+
     if(dataset ==0):
         select_folder()
     dataset = rospy.get_param('dataset', 0)
@@ -58,31 +73,22 @@ def call_funsr():
 
     # Run FUNSR in parallel (non-blocking)
     time.sleep(1)
-    root.percent.config(text = "Initializing surface ..")
-    root.update_idletasks()
+    # root.percent.config(text = "Initializing surface ..")
+    # root.update_idletasks()
     run_normalizedSpace.run_funsr(dataset, root)
-    root.percent.config(text = "Surface Initialized!")
+    # root.percent.config(text = "Surface Initialized!")
     # script_dir = os.path.dirname(os.path.abspath(__file__))
     # os.chdir(script_dir)
 
     # root.after(100, update_progress, progress_bar, percent, root)
 
+
 def load_previous_surface_geometry():
-    
-    #complete this function
-    dataset = rospy.set_param('funsr_done', 1)
-
-def load_previous_registration():
-    
-    #complete this function
-    dataset = rospy.set_param('registration_done', 1)
-        
-
-
+    funsr_complete_pub.publish(True)
 
 def call_register():
-    
-    rospy.set_param("registration_started", 1)
+    registration_started_pub.publish(True)
+
     #complete this function
     dataset = rospy.get_param('dataset', 0)
     if(dataset ==0):
@@ -92,154 +98,90 @@ def call_register():
     # visualize = checkbox_var.get()
     visualize = 0
     # root.percent.config(text = "Computing Registration")
-    root.update_idletasks()
+    # root.update_idletasks()
     print("calling registration indirectly")
     refine=0
     call_registration_indirectly(dataset, visualize, refine)
     # root.percent.config(text = "Registration Complete")
-    rospy.set_param('registration_done', 1)
-    root.update_idletasks()
+    # rospy.set_param('registration_done', 1)
+    registration_done_pub.publish(True)
+    # root.update_idletasks()
 
-
- 
-def call_gating():
-
-    rospy.set_param("gate", 1)
-    time.sleep(1)
-    #complete this function
-    dataset = rospy.get_param('dataset', 0)
-    if(dataset ==0):
-        select_folder()
-    dataset = rospy.get_param('dataset', 0)
-
-    run_gating(dataset)
-    root.percent.config(text = "Gating Complete")
-    root.update_idletasks()
-    
-def call_replay():
-    rospy.set_param("replay", 1)
-    # root.percent.config(text = "Replaying Dataset")
-    root.update_idletasks()
-    time.sleep(0.5)
-    
-
+def load_previous_registration():
+    registration_done_pub.publish(True)
 
 def switch_probe():
-    rospy.set_param('switch_probe', 1)
-    time.sleep(1)
+    switch_probe_pub.publish(True)
 
 def call_refine():
-
-    rospy.set_param("refine_started", 1)
-
+    print("publishing refine start")
+    refine_start_pub.publish(True)
 
 def save_refine():
     
-    rospy.set_param('refine_done', 1)
-    rospy.set_param("refinement_computed", 0)
-    time.sleep(1)
 
-    
 
-    #complete this function
+    # Get dataset path
     dataset = rospy.get_param('dataset', 0)
-    if(dataset ==0):
+    if dataset == 0:
         select_folder()
     dataset = rospy.get_param('dataset', 0)
 
-    
     visualize = 0
     refine = 1
-    # root.percent.config(text = "Refining Registration")
-    # root.update_idletasks()
+
     print("calling refine indirectly")
-    
-    
     call_refine_indirectly(dataset, visualize, refine)
-    # root.percent.config(text = "Refinement Complete")
 
-    rospy.set_param("refinement_computed", 1)
-    
-    # root.update_idletasks()
-        
-    
+  
+    # Publish that refinement is starting
+    refine_done_pub.publish(True)
 
-def switch_vessel():
-    
-    pass
-
-
-
-# only necessary because two functions access the same variable (i.e., pullback)
-# def update_parameters(event=None):
-
-#     # Update the parameters (you may want to add additional logic or error handling)
-#     rospy.set_param("pullback", pullback.get())
+def sim_device_deployment():
+    sim_device_pub.publish(True)
 
 def on_closing():
+    shutdown_pub.publish(True)
     root.quit()
     root.destroy()
-    rospy.set_param('shutdown', 1)
     rospy.signal_shutdown('User quitted')
 
 def start_pullback():
-    """
-    Set the pullback state to 1 (start).
-    """
-    
-    rospy.set_param("pullback", 1)
-    # root.percent.config(text = "Calibrating ECG signal")
-    # root.update_idletasks()
-    print("pullback set to 1")
-    time.sleep(1)
-    # root.percent.config(text = "Starting Pullback")
-    # root.update_idletasks()
-    # pullback_check = rospy.get_param("pullback", 0)
-    # print("pullback STARTED")
-    # print("pullback check", pullback_check)
-
-    # pullback_pub.publish(1)
+    pullback_pub.publish(1)
 
 def stop_pullback():
-    """
-    Set the pullback state to 0 (stop).
-    """
+    pullback_pub.publish(0)
 
-    rospy.set_param("pullback", 0)
-    root.percent.config(text = "Stopping Pullback")
-    root.update_idletasks()
-    # pullback_check = rospy.get_param("pullback", 0)
-    # print("pullback STOPPED")
-    # print("pullback check", pullback_check)
+def call_replay():
+    replay_pub.publish(True)
 
-    # pullback_pub.publish(0)
-
-# def update_progress(progress_bar, percent, value, root):
-#         value = rospy.get_param('funsr_percent', 0)
-#         print("fetched value!", value)
-#         # Update the progress bar and the label
-#         progress_bar['value'] = value
-#         percent.config(text=f"{value}%")
-#         # root.after(100, update_progress, progress_bar, label, value + 1)
-#         root.update_idletasks()  # Update the UI immediately
+def close_gui():
+    root.quit()
+    root.destroy()
+    rospy.signal_shutdown('User quitted')
 
 def quit_aortascope():
     print("closing gui!")
     root.quit()
     root.destroy()
-    rospy.set_param('shutdown', 1)
-    time.sleep(0.3)
     rospy.signal_shutdown('User quitted')
 
-def sim_device_deployment():
- 
-    print("simulating device deployment (gui)")
-    rospy.set_param('sim_device', 1)
-    time.sleep(1)
+def select_folder():
+
+    initial_dir = os.path.expanduser("/home/tdillon/datasets")
+
+    folder_path = filedialog.askdirectory(initialdir=initial_dir,title = 'Select Folder')  # Open folder selection dialog
+   
+    if folder_path:  # If a folder is selected
+        print(f"Selected folder: {folder_path}")
+        rospy.set_param("dataset", folder_path)
+        folder_prompt.config(text=f"{folder_path}")  # Update label with the selected folder
+    else:
+        print("No folder selected")
+        folder_prompt.config(text="No folder selected")  # Update label with default message
+
 
     
-    
- 
 
 try:
 
