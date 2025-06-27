@@ -38,6 +38,7 @@ dissection_track: 0
 registered_ct : 1
 registered_ct_dataset: user_has_not_defined
 live_deformation: 0
+guidewire: 1
 
 double_display: 1
 test_image: 0

@@ -16,6 +16,9 @@ import glob
 import os
 import time
 
+
+guidewire = False
+
 def make_crosshairs_crop(new_height,new_width,crosshair_width,crosshair_height,crosshair_vert_coordinates,crosshair_horiz_coordinates):
 
     # don't want to do this every iteration
@@ -139,8 +142,16 @@ def save_parameters_on_shutdown():
 
     print("Saving rospy calibration parameters")
     # Save the parameters to a YAML file
-    with open('/home/tdillon/mapping/src/calibration_parameters_ivus.yaml', 'w') as file:
-        yaml.dump(param_values, file)
+
+    if(guidewire==False):
+        print("saved IVUS parameters!!")
+        with open('/home/tdillon/mapping/src/calibration_parameters_ivus.yaml', 'w') as file:
+            yaml.dump(param_values, file)
+
+    else:
+        print("saved GUIDEWIRE parameters!!")
+        with open('/home/tdillon/mapping/src/calibration_parameters_guidewire.yaml', 'w') as file:
+            yaml.dump(param_values, file)
 
 def align_vectors(a, b):
     b = b / np.linalg.norm(b) # normalize a
@@ -291,8 +302,8 @@ def revised_fiducial_model_registration(model, fiducial_1,reference_1, em_frame)
     # consider it calibrating the string phantom itself
 
     # the probe isnt perfectly straight when mounted due to drill hole
-    # prerotation=(3.25)*(np.pi/180) 
-    prerotation=(0)*(np.pi/180) 
+    prerotation=(3.25)*(np.pi/180) 
+    # prerotation=(0)*(np.pi/180) 
 
     angle_radians=angle_radians+prerotation
     angle_radians = - angle_radians
@@ -316,83 +327,12 @@ def revised_fiducial_model_registration(model, fiducial_1,reference_1, em_frame)
 
     # maybe include some angle verification
 
-    return rotated_model
-
-
-def one_fiducial_model_registration(model, fiducial_1,reference_1, em_frame):
-
-    # simplify string phantom
-    model  = model .subdivide_midpoint(number_of_iterations=3)
-    point_cloud_1=o3d.geometry.PointCloud()
-    point_cloud_1.points=model.vertices
-    point_cloud_1.paint_uniform_color([0, 0, 1])
-    string_phantom=point_cloud_1
-
-    # # prerotation=np.array([[1, 0, 0],[0, np.cos(-0.05),-np.sin(-0.05)],[0, np.sin(-0.05), np.cos(-0.05)]])
-    # prerotation=np.array([[np.cos(0.02), 0, np.sin(0.02)],[0, 1,0],[-np.sin(0.02), 0, np.cos(0.02)]])
-    # prerotate_roll=np.eye(4)
-    # prerotate_roll[0:3,0:3]=prerotation
-    # string_phantom.transform(prerotate_roll)
-  
-    # # prerotation=np.array([[np.cos(-0.02),-np.sin(-0.02), 0],[np.sin(-0.02), np.cos(-0.02),0],[0, 0, 1]])
-    # # prerotation=np.array([[np.cos(0.035),-np.sin(0.035), 0],[np.sin(0.035), np.cos(0.035),0],[0, 0, 1]])
-    # prerotation=np.array([[np.cos(-0.065),-np.sin(-0.065), 0],[np.sin(-0.065), np.cos(-0.065),0],[0, 0, 1]])
-    # prerotate_roll=np.eye(4)
-    # prerotate_roll[0:3,0:3]=prerotation
-    # string_phantom.transform(prerotate_roll)
-
-    # get the fiducial transform
-    fiducial_1=transform_stamped_to_matrix(fiducial_1)
-    print("fiducial_1 is", fiducial_1)
-    fiducial_1_position=fiducial_1[0:3,3]
-    print("fiducial_1_position is", fiducial_1_position)
-
-    temp_em_frame=o3d.geometry.TriangleMesh.create_coordinate_frame()
-    temp_em_frame.scale(0.025,center=[0,0,0])
-    temp_em_frame.transform(fiducial_1)
-
-    baseframe=o3d.geometry.TriangleMesh.create_coordinate_frame()
-    baseframe.scale(0.025,center=[0,0,0])
-
-
-    # make copies for registration - needed?
-    rotated_model=copy.deepcopy(string_phantom)
-
-    # grab normal of 2000th fiducial1 and 2
-    x_axis=fiducial_1[:3,0]
-    print("x axis of fiducial is", x_axis)
-
-    # rotate model y to fiducial x using align vectors
-    alignment_rotation=align_vectors([0,-1,0], x_axis)
-    alignment_transform=np.eye(4)
-    alignment_transform[0:3,0:3]=alignment_rotation
-    # alignment_transform=get_transform_inverse(alignment_transform)
-    rotated_model.transform(alignment_transform)
-
-    reference_pC=o3d.geometry.PointCloud()
-    reference_pC.points=o3d.utility.Vector3dVector([reference_1,[0,0,0]])
-    reference_pC.transform(alignment_transform)
-    new_point=np.asarray(reference_pC.points)
-
-    # rotate model z to model
-    alignment_rotation=align_vectors([0,-1,0], x_axis)
-    alignment_transform=np.eye(4)
-    alignment_transform[0:3,0:3]=alignment_rotation
-    # alignment_transform=get_transform_inverse(alignment_transform)
-    rotated_model.transform(alignment_transform)
-
-    reference_pC=o3d.geometry.PointCloud()
-    reference_pC.points=o3d.utility.Vector3dVector([reference_1,[0,0,0]])
-    reference_pC.transform(alignment_transform)
-    new_point=np.asarray(reference_pC.points)
-
-    # apply model reference point to EM tracked fiducial
-    tracker_2_displacement=fiducial_1_position-new_point[0,:]
-    rotated_model.translate(tracker_2_displacement)
-
-    # maybe include some angle verification
+    o3d.io.write_point_cloud("/home/tdillon/mapping/src/calibration_ros/src/registration.ply", rotated_model)
 
     return rotated_model
+
+
+
 
 class PointCloudUpdater:
     def __init__(self):
@@ -459,40 +399,33 @@ class PointCloudUpdater:
         model_mseh = model_mesh.scale(0.001,center=[0,0,0])
 
      
-        # COMPUTE REGISTRATION
-        while not rospy.is_shutdown():
-            try:
-                if self.tf_buffer.can_transform('ascension_origin', 'target2', rospy.Time(0)):
-                    fiducial_1=self.tf_buffer.lookup_transform('ascension_origin', 'target2', rospy.Time(0))
-                    break  # Exit the loop if the transform is available
-            except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
-                rospy.logwarn("Waiting for the transform 'ascension_origin' to 'target2'")
+        self.skip = 1 # use for loading previous reg
+
+        if(self.skip ==0):
+            # COMPUTE REGISTRATION
+            while not rospy.is_shutdown():
+                try:
+                    if self.tf_buffer.can_transform('ascension_origin', 'target2', rospy.Time(0)):
+                        fiducial_1=self.tf_buffer.lookup_transform('ascension_origin', 'target2', rospy.Time(0))
+                        break  # Exit the loop if the transform is available
+                except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+                    rospy.logwarn("Waiting for the transform 'ascension_origin' to 'target2'")
     
 
-        # fiducial_1 = self.tf_buffer.lookup_transform('ascension_origin','target2', rospy.Duration(0))
-        print("fiducial 1 is", fiducial_1)
-        # fiducial_2 = self.tf_buffer.lookup_transform('ascension_origin','target3',  rospy.Time.now()- rospy.Duration(0.02))
 
-        # chatgpt look up many transforms?
-        # fiducial_1 = np.asarray([np.mean(tx1[2000:]),np.mean(ty1[2000:]),np.mean(tz1[2000:])])
-        # fiducial_2 = np.asarray([np.mean(tx2[2000:]),np.mean(ty2[2000:]),np.mean(tz2[2000:])]) 
+        # LOAD PREVIOUS OR COMPUTE REG 
+        # model=revised_fiducial_model_registration(model_mesh,fiducial_1, model_1_position, self.vis.add_geometry(self.em_1_frame))
 
-        # model_1_position=np.asarray([0.0295,0.1045,-0.0115]) 
-        # add 0.0005 in x direction, 0.01 in y direction for new hole
-        # model_1_position=np.asarray([0.03,0.1045,-0.0215]) 
-        # artifically add small displacement
+        # load previous registration
+        # model = o3d.io.read_point_cloud("/home/tdillon/mapping/src/calibration_ros/src/registration.ply")
 
-        # new hole
-        # model_1_position=np.asarray([0.032,0.102,-0.0215])  
+        # centered
+        # model.translate([0.008,-0.022,0])
 
-        model_1_position=np.asarray([0.032,0.005,-0.0215]) 
- 
-        # model_2_position=np.asarray([0.665,0.55,-0.9])*10
-        # model=one_fiducial_model_registration(model_mesh,fiducial_1, model_1_position, self.vis.add_geometry(self.em_1_frame))
-        model=revised_fiducial_model_registration(model_mesh,fiducial_1, model_1_position, self.vis.add_geometry(self.em_1_frame))
+        # load canonical registration
+        model = o3d.io.read_point_cloud("/home/tdillon/mapping/src/calibration_ros/src/canonical_registration.ply")
 
-        # LOAD PRIOR REGISTRATION
-        # model = load_previous_registration
+        
         
         self.vis.add_geometry(self.spheres)
         self.vis.add_geometry(self.point_cloud)
@@ -723,19 +656,24 @@ class PointCloudUpdater:
             rospy.logwarn("Failed to lookup transform")
             TW_EM = None
 
-        ref_frame = 'ascension_origin'
-        dest_frame = 'target2'
+        TW_EM=transform_stamped_to_matrix(TW_EM)
 
-        try:
-            # Lookup transform
-            TW_EM_1 = self.tf_buffer.lookup_transform(ref_frame, dest_frame, transform_time)
-        except (rospy.ROSException, tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
-            rospy.logwarn("Failed to lookup transform")
-            TW_EM_1 = None
+        if(self.skip==0):
+            ref_frame = 'ascension_origin'
+            dest_frame = 'target2'
+
+            try:
+                # Lookup transform
+                TW_EM_1 = self.tf_buffer.lookup_transform(ref_frame, dest_frame, transform_time)
+            except (rospy.ROSException, tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+                rospy.logwarn("Failed to lookup transform")
+                TW_EM_1 = None
+
+            TW_EM_1=transform_stamped_to_matrix(TW_EM_1)
     
  
-        TW_EM=transform_stamped_to_matrix(TW_EM)
-        TW_EM_1=transform_stamped_to_matrix(TW_EM_1)
+        
+        
 
         # read in calibration parameters - could change image to image
         angle = rospy.get_param('angle')
@@ -764,9 +702,12 @@ class PointCloudUpdater:
         self.us_frame.transform(TW_EM)
         self.previous_transform_us=TW_EM @ TEM_C
 
-        self.em_1_frame.transform(get_transform_inverse(self.previous_transform_1))
-        self.em_1_frame.transform(TW_EM_1)
-        self.previous_transform_1=TW_EM_1
+        
+
+        if(self.skip==0): 
+            self.em_1_frame.transform(get_transform_inverse(self.previous_transform_1))   
+            self.em_1_frame.transform(TW_EM_1)
+            self.previous_transform_1=TW_EM_1
 
         #see jupyter notebook for faster functions
 
@@ -854,6 +795,7 @@ class PointCloudUpdater:
         self.spheres.paint_uniform_color([0,1,0])
         self.vis.update_geometry(self.spheres)
         self.vis.update_geometry(self.tracker_frame)
+
         self.vis.update_geometry(self.em_1_frame)
         self.vis.update_geometry(self.us_frame)
 

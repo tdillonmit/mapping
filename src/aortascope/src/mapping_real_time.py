@@ -191,18 +191,33 @@ class PointCloudUpdater:
         self.catheter = o3d.geometry.TriangleMesh.create_cylinder(radius=0.0015, height=0.01)
         self.catheter.compute_vertex_normals()
         self.catheter.paint_uniform_color([0,0,1])
+
+        self.guidewire = o3d.geometry.TriangleMesh.create_cylinder(radius=0.0015, height=0.006)
+        self.guidewire.compute_vertex_normals()
+        self.guidewire.paint_uniform_color([0,1,0])
+        self.guidewire_pointcloud_base = o3d.geometry.PointCloud()
+        n = 30
+        z = np.linspace(0, 0.05, n)
+        x = np.zeros_like(z)
+        base_points = np.stack((x, y, z), axis=1)
+        self.guidewire_pointcloud_base.points = o3d.utility.Vector3dVector(base_points)
+        self.guidewire_pointcloud_base.paint_uniform_color([0,1,0])
+        self.guidewire_pointcloud = o3d.geometry.PointCloud()
         
         self.previous_transform=np.eye(4)
         self.previous_transform_1=np.eye(4)
         self.previous_transform_us=np.eye(4)
         self.previous_catheter_transform=np.eye(4)
         self.previous_tracker_transform=np.eye(4)
+        self.previous_guidewire_transform=np.eye(4)
 
         self.vis.add_geometry(self.catheter)
+        self.vis.add_geometry(self.guidewire)
         self.vis.add_geometry(self.tracker)
         self.vis.add_geometry(self.us_frame)
         self.vis.add_geometry(self.tracker_frame)
         self.vis.add_geometry(self.baseframe)
+        self.vis.add_geometry(self.guidewire_pointcloud)
 
     
         # ----- INITIALIZE BOUNDING BOX ----- #
@@ -531,7 +546,7 @@ class PointCloudUpdater:
     def gate_cb(self, msg):                self.gate = msg.data
     def funsr_start_cb(self, msg):         self.funsr_start = msg.data
     def funsr_complete_cb(self, msg):      self.funsr_complete = msg.data
-    def registration_started_cb(self, msg):self.registration_started = msg.data
+    def registration_started_cb(self, msg):self.registration_start = msg.data
     def registration_done_cb(self, msg):   self.reg_complete = msg.data
     def global_pause_cb(self, msg):        self.pause = msg.data
     def switch_probe_cb(self, msg):        self.switch_probe = msg.data
@@ -642,6 +657,8 @@ class PointCloudUpdater:
 
         self.live_deformation = config_yaml['live_deformation']
 
+        self.guidewire = config_yaml['guidewire']
+
         self.double_display = config_yaml['double_display']
 
         self.test_image = config_yaml['test_image']
@@ -710,6 +727,8 @@ class PointCloudUpdater:
 
         self.test_image = 0
         self.test_transform = 0
+
+        # NEED TO LOAD RELEVANT CALIBRATION FILE!!!!! AND SAVE RELEVANT CALIBRATION FILE OTHERWISE YOULL LOSE DATASETS
 
 
         # rospy.set_param('replay', 0)
@@ -921,6 +940,7 @@ class PointCloudUpdater:
     def registration_started(self):
 
         # rospy.set_param('registration_started', 0)
+        print("registration started!")
         self.write_folder = rospy.get_param('dataset', 0)
         self.deeplumen_on = 0
         self.deeplumen_lstm_on = 0
@@ -933,7 +953,7 @@ class PointCloudUpdater:
         
         print("cleared session!")
        
-        while(self.registration_done ==0):
+        while(self.reg_complete ==0):
             # registration_done = rospy.get_param('registration_done', 0)
             time.sleep(1)
 
@@ -1380,7 +1400,7 @@ class PointCloudUpdater:
 
         # if IVUS present in tracking catheter
         # try:
-            # self.vis.remove_geometry(self.us_frame)
+        #     self.vis.remove_geometry(self.us_frame)
         # except:
         #     print("no us frame present")
         try:
@@ -1415,6 +1435,17 @@ class PointCloudUpdater:
 
         self.load_parameters(config_yaml)
         print("loaded tracking yaml")
+
+        with open('/home/tdillon/mapping/src/calibration_parameters_guidewire.yaml', 'r') as file:
+            calib_yaml_gw = yaml.safe_load(file)
+
+        translation_gw = calib_yaml_gw['/translation']
+        radial_offset_gw = calib_yaml_gw['/radial_offset']
+        oclock_gw = calib_yaml_gw['/oclock']
+        TEM_GW = [[1,0,0,translation_gw],[0,1,0,radial_offset_gw*np.cos(oclock_gw)],[0,0,1,radial_offset_gw*np.sin(oclock_gw)],[0, 0, 0, 1]]
+        self.TEM_GW = np.asarray(TEM_GW)
+     
+        
 
         
         if(self.record_poses == 1):
@@ -2955,7 +2986,25 @@ class PointCloudUpdater:
             self.vis2.poll_events()
             self.vis2.update_renderer()
         
-        
+            if(self.guidewire==1):
+
+                T_guidewire = self.get_catheter_transform(TW_EM @ TEM_GW)
+                self.guidewire_cylinder.transform(get_transform_inverse(self.previous_guidewire_transform))
+                self.guidewire_cylinder.transform(T_guidewire)
+                self.previous_guidewire_transform = T_guidewire
+                self.vis.update_geometry(self.guidewire_cylinder)
+                guidewire_pointcloud_temp = copy.deepcopy(self.guidewire_pointcloud_base)
+                guidewire_pointcloud_temp.transform(T_guidewire)
+                query_points = np.asarray(guidewire_pointcloud_temp.points)
+                query_points_tensor = o3d.core.Tensor(query_points, dtype=o3d.core.Dtype.Float32)
+                signed_distance = scene.compute_signed_distance(query_points_tensor)
+                signed_distance_np = signed_distance.numpy()  # Convert to NumPy array
+                arg_points_inside = np.argwhere(signed_distance_np > 0)
+                self.guidewire_pointcloud.points = o3d.utility.Vector3dVector(query_points[arg_points_inside, :])
+                self.guidewire_pointcloud.paint_uniform_color([0,1,0])
+                self.vis.update_geometry(self.guidewire_pointcloud)
+
+
         
 
         self.vis.poll_events()
