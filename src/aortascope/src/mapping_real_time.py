@@ -184,7 +184,7 @@ class PointCloudUpdater:
         self.us_frame=o3d.geometry.TriangleMesh.create_coordinate_frame()
         self.us_frame.scale(self.frame_scaling,center=[0,0,0])
 
-        self.tracker = o3d.geometry.TriangleMesh.create_cylinder(radius=0.0015, height=0.01, resolution=40)
+        self.tracker = o3d.geometry.TriangleMesh.create_cylinder(radius=0.001, height=0.01, resolution=40)
         self.tracker.compute_vertex_normals()
         self.tracker.paint_uniform_color([1,0.5,0])
 
@@ -192,13 +192,14 @@ class PointCloudUpdater:
         self.catheter.compute_vertex_normals()
         self.catheter.paint_uniform_color([0,0,1])
 
-        self.guidewire = o3d.geometry.TriangleMesh.create_cylinder(radius=0.0015, height=0.006)
-        self.guidewire.compute_vertex_normals()
-        self.guidewire.paint_uniform_color([0,1,0])
+        self.guidewire_cylinder = o3d.geometry.TriangleMesh.create_cylinder(radius=0.000225, height=0.004)
+        self.guidewire_cylinder.compute_vertex_normals()
+        self.guidewire_cylinder.paint_uniform_color([0,1,0])
         self.guidewire_pointcloud_base = o3d.geometry.PointCloud()
         n = 30
         z = np.linspace(0, 0.05, n)
         x = np.zeros_like(z)
+        y = np.zeros_like(z)
         base_points = np.stack((x, y, z), axis=1)
         self.guidewire_pointcloud_base.points = o3d.utility.Vector3dVector(base_points)
         self.guidewire_pointcloud_base.paint_uniform_color([0,1,0])
@@ -212,7 +213,7 @@ class PointCloudUpdater:
         self.previous_guidewire_transform=np.eye(4)
 
         self.vis.add_geometry(self.catheter)
-        self.vis.add_geometry(self.guidewire)
+        self.vis.add_geometry(self.guidewire_cylinder)
         self.vis.add_geometry(self.tracker)
         self.vis.add_geometry(self.us_frame)
         self.vis.add_geometry(self.tracker_frame)
@@ -482,6 +483,12 @@ class PointCloudUpdater:
         self.shutdown = False
         self.pullback = 0  # Int32
         self.replay = False
+
+        # for speed pruning
+        transform_time = rospy.Time.now()
+        self.previous_time_in_sec = transform_time.to_sec()
+        self.previous_transform_ema = np.eye(4)
+        self.smoothed_linear_speed = 0.0
 
 
         # FRAME GRABBER AND EM SIMULATOR
@@ -1346,9 +1353,10 @@ class PointCloudUpdater:
         
         print("registered the ct from non rigid icp!!")
 
-        # self.scene = o3d.t.geometry.RaycastingScene()
-        # self.registered_ct_mesh = o3d.t.geometry.TriangleMesh.from_legacy(self.registered_ct_mesh)
-        # _ = self.scene.add_triangles(self.registered_ct_mesh)  # we do not need the geometry ID for mesh
+        self.scene = o3d.t.geometry.RaycastingScene()
+        self.registered_ct_mesh_copy = copy.deepcopy(self.registered_ct_mesh)
+        self.registered_ct_mesh_copy = o3d.t.geometry.TriangleMesh.from_legacy(self.registered_ct_mesh_copy)
+        _ = self.scene.add_triangles(self.registered_ct_mesh_copy)  # we do not need the geometry ID for mesh
 
         # Get current camera parameters
         view_control_1 = self.vis.get_view_control()
@@ -1472,9 +1480,14 @@ class PointCloudUpdater:
             # don't constrain the subbranches, aortic endpoints only - need larger constraint radius to capture aortic valve orifice
             self.constraint_locations = np.vstack((np.asarray(self.centerline_pc.points)[0,:],np.asarray(self.centerline_pc.points)[-1,:]))
             self.constraint_radius = 0.02
+            
 
             # could also have no constraints if desirable (TAVR)
             # self.constraint_locations = np.empty((0,3))
+
+          
+          
+        
 
             self.constraint_indices = get_all_nodes_inside_radius(self.constraint_locations, self.constraint_radius, self.registered_ct_mesh)
             
@@ -1542,6 +1555,10 @@ class PointCloudUpdater:
             # turn off ML components
             self.deeplumen_on = 0
             self.deeplumen_lstm_on = 0
+
+            self.vis.remove_geometry(self.catheter)
+            self.vis.remove_geometry(self.tracker_frame)
+            self.vis.remove_geometry(self.volumetric_near_point_cloud)
          
 
         elif (self.dest_frame == 'target2'):
@@ -1778,7 +1795,7 @@ class PointCloudUpdater:
 
         now = rospy.Time.now()
         delta = now - self.last_image_time  
-        print("rospy difference time", delta.to_sec())
+        # print("rospy difference time", delta.to_sec())
         if delta < rospy.Duration(0.02):  # max ~50 Hz
             print("throttling to cool CPU!")
             return
@@ -1820,6 +1837,11 @@ class PointCloudUpdater:
         except (rospy.ROSException, tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
             rospy.logwarn("Failed to lookup transform")
             TW_EM = None
+
+        
+        
+
+
 
 
         # ----- TEMP BOSTON SCIENTIFIC -----#
@@ -1883,6 +1905,18 @@ class PointCloudUpdater:
        
         TW_EM=transform_stamped_to_matrix(TW_EM)
 
+        # prune fast probe moves
+        current_time_in_sec = transform_time.to_sec()
+        self.smoothed_linear_speed = update_linear_speed_ema(TW_EM, current_time_in_sec, self.previous_transform_ema, self.previous_time_in_sec, self.smoothed_linear_speed)
+        self.previous_time_in_sec = current_time_in_sec
+        self.previous_transform_ema = TW_EM
+
+        print("smoothed linear speed:",self.smoothed_linear_speed)
+        if self.smoothed_linear_speed > 0.15:  # max ~50 Hz
+            print("probe speed too fast! omit image")
+            return
+
+
         # now get the original image's timestamp
         timestamp_secs = msg.header.stamp.secs
         timestamp_nsecs = msg.header.stamp.nsecs
@@ -1932,7 +1966,7 @@ class PointCloudUpdater:
         
             
  
-        print("image number is", self.image_number)
+        # print("image number is", self.image_number)
         # recording
         if(self.record==1):
             # code for saving images
@@ -1979,6 +2013,8 @@ class PointCloudUpdater:
             pass
 
         self.append_image_transform_pair(TW_EM, grayscale_image)
+
+    
 
     def append_image_transform_pair(self, TW_EM, grayscale_image):
 
@@ -2063,7 +2099,7 @@ class PointCloudUpdater:
         # ------ FIRST RETURN SEGMENTATION -------- #
 
         # first return segmentation
-        if(self.deeplumen_on == 0 and self.deeplumen_lstm_on == 0):
+        if(self.deeplumen_on == 0 and self.deeplumen_lstm_on == 0 and self.dest_frame== 'target1'):
 
             relevant_pixels=first_return_segmentation(grayscale_image,threshold, crop_index,self.gridlines)
             relevant_pixels=np.asarray(relevant_pixels).squeeze()
@@ -2145,7 +2181,7 @@ class PointCloudUpdater:
             # two_d_points=centred_pixels*scaling
             # three_d_points=np.hstack((np.zeros((two_d_points.shape[0], 1)),two_d_points)) 
 
-        if(self.deeplumen_on == 1 or self.deeplumen_lstm_on == 1):
+        if((self.deeplumen_on == 1 or self.deeplumen_lstm_on == 1) and self.dest_frame=='target1'):
 
             if(self.deeplumen_on == 1):
             
@@ -2216,7 +2252,7 @@ class PointCloudUpdater:
 
                     pred= deeplumen_lstm_segmentation(sequence,self.model)
                     raw_data = pred[0].numpy()
-                    mask_1, mask_2 = post_process_deeplumen(raw_data)
+                    mask_1, mask_2 = post_process_lstm_deeplumen(raw_data)
 
 
                     end_time=time.time()
@@ -2436,7 +2472,23 @@ class PointCloudUpdater:
             # print("image publish time", diff_time)
 
 
-        
+        # FOT INTEGRATED IVUS AND STEERING GET RID OF THIS!
+        if(self.dest_frame=='target2'):
+            mask_1 = np.zeros_like(grayscale_image)
+            mask_2 = np.zeros_like(grayscale_image)
+
+            original_image = cv2.cvtColor(original_image, cv2.COLOR_GRAY2BGR)
+            rgb_image_msg = Image(
+                # header=header,
+                height=np.shape(original_image)[0],
+                width=np.shape(original_image)[1],
+                encoding='rgb8',
+                is_bigendian=False,
+                step=np.shape(original_image)[1] * 3,
+                data=original_image.tobytes()
+            )
+            self.rgb_image_pub.publish(rgb_image_msg)
+
 
 
             
@@ -2592,6 +2644,8 @@ class PointCloudUpdater:
 
         # ------- VOLUMETRIC POINT CLOUD 3D ----- #
         if(self.vpC_map == 1):
+            
+            
             if(volumetric_three_d_points_near_lumen is not None):
                 near_vpC_points=o3d.geometry.PointCloud()
                 near_vpC_points.points=o3d.utility.Vector3dVector(volumetric_three_d_points_near_lumen)
@@ -2636,46 +2690,6 @@ class PointCloudUpdater:
                     #     print("IVUS live mesh deformation not working")
                     #     pass
 
-                
-
-                # EM BASED DEFORMATION
-                if(self.live_deformation == 1 and self.registered_ct == 1 and self.dest_frame == 'target2'):
-                     
-                   
-                    # check if EM transform is outside the mesh before deformation calculations
-                    query_points = np.asarray([TW_EM[:3,3]])
-                    query_points_tensor = o3d.core.Tensor(query_points, dtype=o3d.core.Dtype.Float32)
-                    signed_distance = scene.compute_signed_distance(query_points_tensor)
-                    signed_distance_np = signed_distance.numpy()  # Convert to NumPy array
-
-                    if(signed_distance_np[0] > 0):
-                        try:
-                            deformed_mesh = live_deform(self.registered_ct_mesh, self.constraint_indices, self.centerline_pc, TW_EM @ TEM_C, near_vpC_points, self.dest_frame )
-                            
-                            temp_lineset = create_wireframe_lineset_from_mesh(deformed_mesh)
-                            self.registered_ct_lineset.points = temp_lineset.points
-                            self.registered_ct_lineset.lines = temp_lineset.lines
-                            self.vis.update_geometry(self.registered_ct_lineset)
-
-                            # mapping from coarse deformed mesh to fine deformed mesh nodes for endoscopic view
-                            fine_deformed_vertices = deform_fine_mesh_using_knn(self.registered_ct_mesh, deformed_mesh, self.registered_ct_mesh_2, self.knn_idxs, self.knn_weights, self.coarse_template_vertices, self.fine_template_vertices, self.adjacency_matrix)
-
-                            # self.registered_ct_mesh_2.vertices = deformed_mesh.vertices
-                            self.registered_ct_mesh_2.vertices = o3d.utility.Vector3dVector(fine_deformed_vertices)
-                            self.registered_ct_mesh_2.compute_vertex_normals()
-                            self.vis2.update_geometry(self.registered_ct_mesh_2)
-
-                            # deform the green spheres
-                            ct_spheres_deformed_points = deform_points_using_knn(self.registered_ct_mesh, deformed_mesh,  self.knn_idxs_spheres, self.knn_weights_spheres, self.coarse_template_vertices, self.ct_centroids, self.adjacency_matrix)
-                            ct_spheres_temp = get_sphere_cloud(ct_spheres_deformed_points , 0.00225, 20, [0,1,0])
-                            self.ct_spheres.vertices =  ct_spheres_temp.vertices
-                            self.vis.update_geometry(self.ct_spheres)
-                            self.vis2.update_geometry(self.ct_spheres)
-                        except:
-                            print("EM live mesh deformation not working")
-                            pass
-
-
                 if(self.extend == 1 and (self.dissection_mapping == 1 or self.refine==1)):
                     # prevent memory issues by commenting this out
                     self.volumetric_near_point_cloud.points.extend(near_vpC_points.points)
@@ -2684,6 +2698,54 @@ class PointCloudUpdater:
 
 
                 self.volumetric_near_point_cloud.paint_uniform_color([1,0,0])
+
+            # EM BASED DEFORMATION
+
+
+            if(self.live_deformation == 1 and self.registered_ct == 1 and self.dest_frame == 'target2' and volumetric_three_d_points_near_lumen is None):
+
+                
+                    
+                
+                # check if EM transform is outside the mesh before deformation calculations
+                query_points = np.asarray([TW_EM[:3,3]])
+                query_points_tensor = o3d.core.Tensor(query_points, dtype=o3d.core.Dtype.Float32)
+                signed_distance = self.scene.compute_signed_distance(query_points_tensor)
+                signed_distance_np = signed_distance.numpy()  # Convert to NumPy array
+
+               
+            
+                near_vpC_points = None #this should still work with live deform there's a condition inside its
+
+                if(signed_distance_np[0] > 0):
+                    # try:  
+                    deformed_mesh = live_deform(self.registered_ct_mesh, self.constraint_indices, self.centerline_pc, TW_EM, near_vpC_points, self.dest_frame )
+                    
+                    temp_lineset = create_wireframe_lineset_from_mesh(deformed_mesh)
+                    self.registered_ct_lineset.points = temp_lineset.points
+                    self.registered_ct_lineset.lines = temp_lineset.lines
+                    self.vis.update_geometry(self.registered_ct_lineset)
+
+                    # mapping from coarse deformed mesh to fine deformed mesh nodes for endoscopic view
+                    fine_deformed_vertices = deform_fine_mesh_using_knn(self.registered_ct_mesh, deformed_mesh, self.registered_ct_mesh_2, self.knn_idxs, self.knn_weights, self.coarse_template_vertices, self.fine_template_vertices, self.adjacency_matrix)
+
+                    # self.registered_ct_mesh_2.vertices = deformed_mesh.vertices
+                    self.registered_ct_mesh_2.vertices = o3d.utility.Vector3dVector(fine_deformed_vertices)
+                    self.registered_ct_mesh_2.compute_vertex_normals()
+                    self.vis2.update_geometry(self.registered_ct_mesh_2)
+
+                    # deform the green spheres
+                    ct_spheres_deformed_points = deform_points_using_knn(self.registered_ct_mesh, deformed_mesh,  self.knn_idxs_spheres, self.knn_weights_spheres, self.coarse_template_vertices, self.ct_centroids, self.adjacency_matrix)
+                    ct_spheres_temp = get_sphere_cloud(ct_spheres_deformed_points , 0.00225, 20, [0,1,0])
+                    self.ct_spheres.vertices =  ct_spheres_temp.vertices
+                    self.vis.update_geometry(self.ct_spheres)
+                    self.vis2.update_geometry(self.ct_spheres)
+                    # except:
+                    #     print("EM live mesh deformation not working")
+                    #     pass
+
+
+                
 
                 
 
@@ -2988,7 +3050,9 @@ class PointCloudUpdater:
         
             if(self.guidewire==1):
 
-                T_guidewire = self.get_catheter_transform(TW_EM @ TEM_GW)
+                
+
+                T_guidewire = self.get_catheter_transform(TW_EM @ self.TEM_GW)
                 self.guidewire_cylinder.transform(get_transform_inverse(self.previous_guidewire_transform))
                 self.guidewire_cylinder.transform(T_guidewire)
                 self.previous_guidewire_transform = T_guidewire
@@ -2996,11 +3060,14 @@ class PointCloudUpdater:
                 guidewire_pointcloud_temp = copy.deepcopy(self.guidewire_pointcloud_base)
                 guidewire_pointcloud_temp.transform(T_guidewire)
                 query_points = np.asarray(guidewire_pointcloud_temp.points)
+
                 query_points_tensor = o3d.core.Tensor(query_points, dtype=o3d.core.Dtype.Float32)
-                signed_distance = scene.compute_signed_distance(query_points_tensor)
+                signed_distance = self.scene.compute_signed_distance(query_points_tensor)
                 signed_distance_np = signed_distance.numpy()  # Convert to NumPy array
-                arg_points_inside = np.argwhere(signed_distance_np > 0)
+                arg_points_inside = np.argwhere(signed_distance_np < 0).flatten()
                 self.guidewire_pointcloud.points = o3d.utility.Vector3dVector(query_points[arg_points_inside, :])
+
+                # self.guidewire_pointcloud.points = o3d.utility.Vector3dVector(query_points)
                 self.guidewire_pointcloud.paint_uniform_color([0,1,0])
                 self.vis.update_geometry(self.guidewire_pointcloud)
 

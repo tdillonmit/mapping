@@ -17,7 +17,7 @@
 /run_id: 8c1c8568-5144-11f0-ac27-4fe94493df48
 /scaling: 7.65e-05
 /threshold: 112
-/translation: 0.005
+/translation: 0.003
 /usb_cam/framerate: 40
 /usb_cam/image_height: 1024
 /usb_cam/image_raw/compressed/format: jpeg
