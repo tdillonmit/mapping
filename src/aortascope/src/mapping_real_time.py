@@ -872,6 +872,8 @@ class PointCloudUpdater:
 
     def start_recording(self):
 
+        self.write_folder = rospy.get_param('dataset',0)
+
         if not hasattr(self, 'write_folder'):
             self.write_folder = self.prompt_for_folder()
             
@@ -889,7 +891,7 @@ class PointCloudUpdater:
         self.extend=1
 
         # start appending to image batch
-        self.write_folder = rospy.get_param('dataset',0)
+        
         self.image_batch=[]
         self.tw_em_batch=[]
 
@@ -1264,6 +1266,8 @@ class PointCloudUpdater:
             
 
             view_control_1.set_zoom(0.25)
+
+
             
             return
 
@@ -1336,7 +1340,7 @@ class PointCloudUpdater:
         self.registered_ct_mesh_2.compute_vertex_normals()
 
         # DELETED FOR FEVAR
-        # self.vis2.add_geometry(self.ct_spheres)
+        self.vis2.add_geometry(self.ct_spheres)
 
         self.vis2.add_geometry(self.registered_ct_mesh_2)
         self.vis2.add_geometry(self.tracker)
@@ -1367,6 +1371,14 @@ class PointCloudUpdater:
         
 
         view_control_1.set_zoom(0.25)
+
+
+        points = np.asarray(self.registered_ct_lineset.points)  # Convert point cloud to numpy array
+        self.registered_centroid = np.mean(points, axis=0) 
+
+        
+
+        
         
     
       
@@ -1419,6 +1431,11 @@ class PointCloudUpdater:
             self.vis.remove_geometry(self.volumetric_far_point_cloud)
         except:
             print("no volumetric far point cloud present")
+
+        try:
+            self.vis.remove_geometry(self.mesh_near_lumen_lineset)
+        except:
+            print("no near lumen mesh present")
         
        
 
@@ -1474,11 +1491,18 @@ class PointCloudUpdater:
         if(self.live_deformation == 1):
             self.constraint_radius=self.default_values['/constraint_radius'] 
 
+            # don't deform the subbranches
+            self.free_branch_locations = self.constraint_locations
+
             # constrain the subbranches
             # self.constraint_locations = np.vstack((self.constraint_locations,np.asarray(self.centerline_pc.points)[0,:],np.asarray(self.centerline_pc.points)[-1,:]))
 
             # don't constrain the subbranches, aortic endpoints only - need larger constraint radius to capture aortic valve orifice
             self.constraint_locations = np.vstack((np.asarray(self.centerline_pc.points)[0,:],np.asarray(self.centerline_pc.points)[-1,:]))
+
+            
+
+
             self.constraint_radius = 0.02
             
 
@@ -1490,6 +1514,10 @@ class PointCloudUpdater:
         
 
             self.constraint_indices = get_all_nodes_inside_radius(self.constraint_locations, self.constraint_radius, self.registered_ct_mesh)
+
+            #release the applied deformation to these points but still allow them to move with adjacent nodes, just don't prescribe a deformation to them
+            self.free_branch_radius = 0.0065
+            self.free_branch_indices = get_all_nodes_inside_radius(self.free_branch_locations, self.free_branch_radius, self.registered_ct_mesh)
             
             # visualize the constraints if desired
             # test_pc= o3d.geometry.PointCloud() 
@@ -2719,7 +2747,7 @@ class PointCloudUpdater:
 
                 if(signed_distance_np[0] > 0):
                     # try:  
-                    deformed_mesh = live_deform(self.registered_ct_mesh, self.constraint_indices, self.centerline_pc, TW_EM, near_vpC_points, self.dest_frame )
+                    deformed_mesh = live_deform(self.registered_ct_mesh, self.constraint_indices, self.centerline_pc, TW_EM, near_vpC_points, self.dest_frame, self.scene, self.free_branch_indices )
                     
                     temp_lineset = create_wireframe_lineset_from_mesh(deformed_mesh)
                     self.registered_ct_lineset.points = temp_lineset.points
@@ -2886,8 +2914,10 @@ class PointCloudUpdater:
                 view_control_1 = self.vis.get_view_control()
                 camera_parameters_1 = view_control_1.convert_to_pinhole_camera_parameters()
                 
-                points = np.asarray(self.registered_ct_lineset.points)  # Convert point cloud to numpy array
-                centroid = np.mean(points, axis=0) 
+                # points = np.asarray(self.registered_ct_lineset.points)  # Convert point cloud to numpy array
+                # centroid = np.mean(points, axis=0) 
+
+                centroid = self.registered_centroid
 
                 position_tracker = TW_EM[:3,3]
                 average_point = ((centroid/4)+(3*position_tracker/4))
