@@ -300,7 +300,10 @@ try:
     # quit_button = Button(root, text="Quit Application", font=button_font, width=button_width, height=button_height, command = quit_aortascope)
     # quit_button.grid(row=13, column=0, padx=padding_x, pady=padding_y)
 
-    sim_device = Button(root, text="Simulate Device Deployment", font=button_font, width=button_width, height=button_height, command = sim_device_deployment)
+    # sim_device = Button(root, text="Simulate Device Deployment", font=button_font, width=button_width, height=button_height, command = sim_device_deployment)
+    # sim_device.grid(row=13, column=0, padx=padding_x, pady=padding_y)
+
+    sim_device = Button(root, text="Load IVUS Mesh Only", font=button_font, width=button_width, height=button_height, command = load_previous_surface_geometry)
     sim_device.grid(row=13, column=0, padx=padding_x, pady=padding_y)
 
 

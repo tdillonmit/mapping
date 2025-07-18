@@ -196,8 +196,8 @@ class PointCloudUpdater:
         self.guidewire_cylinder.compute_vertex_normals()
         self.guidewire_cylinder.paint_uniform_color([0,1,0])
         self.guidewire_pointcloud_base = o3d.geometry.PointCloud()
-        n = 30
-        z = np.linspace(0, 0.05, n)
+        n = 20
+        z = np.linspace(0, 0.03, n)
         x = np.zeros_like(z)
         y = np.zeros_like(z)
         base_points = np.stack((x, y, z), axis=1)
@@ -484,6 +484,8 @@ class PointCloudUpdater:
         self.pullback = 0  # Int32
         self.replay = False
 
+        self.funsr_only = 0
+
         # for speed pruning
         transform_time = rospy.Time.now()
         self.previous_time_in_sec = transform_time.to_sec()
@@ -737,7 +739,15 @@ class PointCloudUpdater:
         self.test_image = 0
         self.test_transform = 0
 
-        # NEED TO LOAD RELEVANT CALIBRATION FILE!!!!! AND SAVE RELEVANT CALIBRATION FILE OTHERWISE YOULL LOSE DATASETS
+        # load the calibration file for the REPLAYED dataset - note this means you will have that calibration file loaded when you 
+        # go back to aortscope real time mapping
+        with open(self.write_folder + '/calibration_parameters_ivus.yaml', 'r') as file:
+            self.calib_yaml = yaml.safe_load(file)
+
+        self.angle = self.calib_yaml['/angle']
+        self.translation = self.calib_yaml['/translation']
+        self.radial_offset = self.calib_yaml['/radial_offset']
+        self.o_clock = self.calib_yaml['/oclock']
 
 
         # rospy.set_param('replay', 0)
@@ -1233,29 +1243,80 @@ class PointCloudUpdater:
         return
         
 
-    
+    # this is now just a function for making do with a rigid TSDF lumen mesh when no CT available
     def funsr_done(self):
 
-        
-        self.write_folder = rospy.get_param('dataset', 0)
+
+        self.write_folder = rospy.get_param('dataset', 0) 
+
         if(self.write_folder ==0):
             self.write_folder = self.prompt_for_folder()
             
         while(self.write_folder ==None):
             self.write_folder = self.prompt_for_folder()
-            
+
+        self.extend = 0
+        self.record = 0
+
+          
         # superimpose the completed surface geometry
-        # ivus_funsr_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/full_lumen_mesh.ply')
-        # ivus_funsr_lineset = create_wireframe_lineset_from_mesh(ivus_funsr_mesh)
-        # ivus_funsr_lineset.paint_uniform_color([0,0,0])
-        # self.vis.add_geometry(ivus_funsr_lineset)
-        # self.vis2.add_geometry(ivus_funsr_mesh)
+        ivus_funsr_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/tsdf_mesh_near_lumen.ply')
+        ivus_funsr_lineset = create_wireframe_lineset_from_mesh(ivus_funsr_mesh)
+        ivus_funsr_lineset.paint_uniform_color([0,0,0])
+        self.vis.add_geometry(ivus_funsr_lineset)
+        ivus_funsr_mesh.paint_uniform_color([1,0,0])
+        self.vis2.add_geometry(ivus_funsr_lineset)
 
-        self.deeplumen_on = 0
-        self.deeplumen_lstm_on = 0
+        # adding raw volumetric far point cloud data
+        self.far_pc = o3d.io.read_point_cloud(self.write_folder + '/volumetric_far_point_cloud.ply')
+        if(self.refine==1):
+            self.far_pc = o3d.io.read_point_cloud(self.write_folder + '/volumetric_far_point_cloud_refine.ply')
+        self.far_pc.paint_uniform_color([0,0,1])
+        self.vis.add_geometry(self.far_pc)
+        self.vis2.add_geometry(self.far_pc)
 
-        if not hasattr(self, 'model'):
-            self.initialize_deeplumen_model()
+        
+        self.vis2.add_geometry(self.tracker)
+
+
+        # Get current camera parameters
+        view_control_1 = self.vis.get_view_control()
+
+        view_control_1.set_up([0,-1,0])
+
+        view_control_1.set_front([0,0,-1])
+        
+        view_control_1.set_zoom(0.25)
+
+
+
+        self.vis.poll_events()
+        self.vis.update_renderer()
+
+        self.vis2.poll_events()
+        self.vis2.update_renderer()
+
+        self.funsr_only = 1
+        points = np.asarray(ivus_funsr_mesh.vertices)  # Convert point cloud to numpy array
+        self.funsr_centroid = np.mean(points, axis=0) 
+
+        self.guidewire = 1
+
+        with open('/home/tdillon/mapping/src/calibration_parameters_guidewire.yaml', 'r') as file:
+            calib_yaml_gw = yaml.safe_load(file)
+
+        translation_gw = calib_yaml_gw['/translation']
+        radial_offset_gw = calib_yaml_gw['/radial_offset']
+        oclock_gw = calib_yaml_gw['/oclock']
+        TEM_GW = [[1,0,0,translation_gw],[0,1,0,radial_offset_gw*np.cos(oclock_gw)],[0,0,1,radial_offset_gw*np.sin(oclock_gw)],[0, 0, 0, 1]]
+        self.TEM_GW = np.asarray(TEM_GW)
+
+
+
+     
+
+
+        
 
       
 
@@ -1535,7 +1596,37 @@ class PointCloudUpdater:
             self.image_tags=[]
            
 
-        # GUI SPECIFIC
+        # GUI SPECIFIC - self.write_folder = rospy.get_param('dataset', 0) 
+
+        self.deeplumen_on = 0
+        self.deeplumen_lstm_on = 0
+
+        if(self.write_folder ==0):
+            self.write_folder = self.prompt_for_folder()
+            
+        while(self.write_folder ==None):
+            self.write_folder = self.prompt_for_folder()
+
+        self.extend = 0
+        self.record = 0
+
+        if(self.dest_frame == 'target1'):
+            print("assuming integrated catheter")
+            self.vpC_map = 1
+        try:
+            
+            self.vis.remove_geometry(self.processed_centreline)
+            self.vis.remove_geometry(ivus_funsr_lineset)
+            self.vis.remove_geometry(ivus_funsr_mesh)
+            
+        except NameError:
+            print("no geometries to delete!")
+
+
+        try:
+            self.vis.remove_geometry(self.mesh_near_lumen)
+        except:
+            print("no near lumen present")
         if hasattr(self, 'registered_ct') and self.registered_ct is not None:
             print("registered_ct is", self.registered_ct)
         else:
@@ -1618,6 +1709,12 @@ class PointCloudUpdater:
             if not hasattr(self, 'model'):
                 self.initialize_deeplumen_model()
 
+
+        self.vis.poll_events()
+        self.vis.update_renderer()
+
+        self.vis2.poll_events()
+        self.vis2.update_renderer()
   
 
             
@@ -2137,6 +2234,7 @@ class PointCloudUpdater:
             self.funsr_start = False
 
         if self.funsr_complete:
+            print("loading IVUS geometry")
             self.funsr_done()
             self.funsr_complete = False
 
@@ -2912,7 +3010,7 @@ class PointCloudUpdater:
 
         # ----- SIMULATE PROBE VIEW ------- #
         # if(self.registered_ct ==  1 or self.dissection_track == 1):
-        if(self.registered_ct ==  1 ):
+        if(self.registered_ct ==  1 or self.funsr_only == 1):
             view_control = self.vis2.get_view_control()
 
             # Set the camera view aligned with the x-axis
@@ -2968,7 +3066,7 @@ class PointCloudUpdater:
                 view_control_1.set_lookat(lookat)
 
             
-        if(self.registered_ct ==1):
+        if(self.registered_ct ==1 or self.funsr_only == 1):
 
 
                 view_control_1 = self.vis.get_view_control()
@@ -2977,7 +3075,11 @@ class PointCloudUpdater:
                 # points = np.asarray(self.registered_ct_lineset.points)  # Convert point cloud to numpy array
                 # centroid = np.mean(points, axis=0) 
 
-                centroid = self.registered_centroid
+                if(self.funsr_only != 1):
+                    centroid = self.registered_centroid
+
+                else:
+                    centroid = self.funsr_centroid
 
                 position_tracker = TW_EM[:3,3]
                 average_point = ((centroid/4)+(3*position_tracker/4))
@@ -3113,7 +3215,7 @@ class PointCloudUpdater:
         self.vis.update_geometry(self.tracker)
 
 
-        if(self.registered_ct ==1):
+        if(self.registered_ct ==1 or self.funsr_only==1):
             self.tracker_frame.transform(get_transform_inverse(self.previous_transform))
             self.tracker_frame.transform(TW_EM)
             self.previous_transform=TW_EM
@@ -3133,7 +3235,7 @@ class PointCloudUpdater:
 
     
 
-        if(self.registered_ct ==1):
+        if(self.registered_ct ==1 or self.funsr_only == 1):
             self.vis2.update_geometry(self.tracker)
             self.vis2.poll_events()
             self.vis2.update_renderer()
@@ -3151,11 +3253,15 @@ class PointCloudUpdater:
                 guidewire_pointcloud_temp.transform(T_guidewire)
                 query_points = np.asarray(guidewire_pointcloud_temp.points)
 
-                query_points_tensor = o3d.core.Tensor(query_points, dtype=o3d.core.Dtype.Float32)
-                signed_distance = self.scene.compute_signed_distance(query_points_tensor)
-                signed_distance_np = signed_distance.numpy()  # Convert to NumPy array
-                arg_points_inside = np.argwhere(signed_distance_np < 0).flatten()
-                self.guidewire_pointcloud.points = o3d.utility.Vector3dVector(query_points[arg_points_inside, :])
+                if(self.funsr_only != 1):
+                    query_points_tensor = o3d.core.Tensor(query_points, dtype=o3d.core.Dtype.Float32)
+                    signed_distance = self.scene.compute_signed_distance(query_points_tensor)
+                    signed_distance_np = signed_distance.numpy()  # Convert to NumPy array
+                    arg_points_inside = np.argwhere(signed_distance_np < 0).flatten()
+                    self.guidewire_pointcloud.points = o3d.utility.Vector3dVector(query_points[arg_points_inside, :])
+
+                if(self.funsr_only==1):
+                    self.guidewire_pointcloud.points = o3d.utility.Vector3dVector(query_points)
 
                 # self.guidewire_pointcloud.points = o3d.utility.Vector3dVector(query_points)
                 self.guidewire_pointcloud.paint_uniform_color([0,1,0])
