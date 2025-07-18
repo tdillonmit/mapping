@@ -629,6 +629,8 @@ class PointCloudUpdater:
         self.record = config_yaml['record']
 
         self.record_poses =0
+        
+        self.save_replay_data = config_yaml['save_replay_data']
 
         # healthy first return mapping for reference
         self.tsdf_map = config_yaml['tsdf_map']
@@ -730,7 +732,7 @@ class PointCloudUpdater:
         
 
 
-    def replay(self):
+    def replay_function(self):
 
         self.test_image = 0
         self.test_transform = 0
@@ -761,10 +763,12 @@ class PointCloudUpdater:
         except:
             print("no volumetric near point cloud present")
 
-        try:
-            self.vis.remove_geometry(self.volumetric_far_point_cloud)
-        except:
-            print("no volumetric far point cloud present")
+        # want this
+        # try:
+        #     self.vis.remove_geometry(self.volumetric_far_point_cloud)
+        # except:
+        #     print("no volumetric far point cloud present")
+
 
 
         
@@ -869,6 +873,45 @@ class PointCloudUpdater:
 
         self.extend=0
 
+        # SAVE THE REPLAYED DATA (NOT IMAGES OR TW_EM)
+        if(self.save_replay_data == 1):
+           
+            self.record = 0
+            
+  
+            o3d.io.write_point_cloud(self.write_folder +  "/volumetric_near_point_cloud.ply", pc_updater.volumetric_near_point_cloud)
+
+            o3d.io.write_point_cloud(self.write_folder +  "/volumetric_far_point_cloud.ply", pc_updater.volumetric_far_point_cloud)
+
+            o3d.io.write_point_cloud(self.write_folder +  "/orifice_center_pc.ply", pc_updater.orifice_center_point_cloud)
+
+            o3d.io.write_triangle_mesh(self.write_folder  +  "/tsdf_mesh_near_lumen.ply", pc_updater.mesh_near_lumen)
+
+            # for evaluation purposes
+            o3d.io.write_point_cloud(self.write_folder +  "/boundary_near_point_cloud.ply", pc_updater.boundary_near_point_cloud)
+
+
+            # do spline smoothing in post processing
+            for transformed_centroid in self.transformed_centroids:
+            
+                # ----- ADD TO BUFFERS ------ #
+                self.centroid_buffer.append(transformed_centroid[:3])
+            
+                if(len(self.centroid_buffer) >= self.buffer_size):
+                    self.delta_buffer_x, self.delta_buffer_y, self.delta_buffer_z,closest_points, centrepoints = process_centreline_bspline(self.centroid_buffer, self.delta_buffer_x,self.delta_buffer_y,self.delta_buffer_z, self.buffer_size)
+                    self.processed_centreline.points.extend(o3d.utility.Vector3dVector(centrepoints))
+                    self.processed_centreline.paint_uniform_color([1,0,0])
+
+            o3d.io.write_point_cloud(self.write_folder +  "/smoothed_bspline_centreline.ply", pc_updater.processed_centreline)
+
+
+          
+
+          
+
+        
+
+
 
     def start_recording(self):
 
@@ -924,6 +967,9 @@ class PointCloudUpdater:
         # for post processing of tracking data
         folder_path = self.write_folder + '/pose_data'
         create_folder(folder_path)
+
+        # this is important!
+        self.branch_pass = 0
 
     
 
@@ -1345,6 +1391,14 @@ class PointCloudUpdater:
         self.vis2.add_geometry(self.registered_ct_mesh_2)
         self.vis2.add_geometry(self.tracker)
 
+
+        # adding raw volumetric far point cloud data
+        self.far_pc = o3d.io.read_point_cloud(self.write_folder + '/volumetric_far_point_cloud.ply')
+        if(self.refine==1):
+            self.far_pc = o3d.io.read_point_cloud(self.write_folder + '/volumetric_far_point_cloud_refine.ply')
+        self.far_pc.paint_uniform_color([0,0,1])
+        self.vis.add_geometry(self.far_pc)
+
         
         # self.vis.remove_geometry(self.catheter)
 
@@ -1375,6 +1429,9 @@ class PointCloudUpdater:
 
         points = np.asarray(self.registered_ct_lineset.points)  # Convert point cloud to numpy array
         self.registered_centroid = np.mean(points, axis=0) 
+
+
+
 
         
 
@@ -1834,9 +1891,9 @@ class PointCloudUpdater:
         
 
         # self.replay_data = rospy.get_param('replay', 0 )
-        if(self.replay_data ==1):
-            self.replay()
-            self.replay_data = 0
+        if(self.replay ==1):
+            self.replay_function()
+            self.replay = 0
             # rospy.set_param('replay', 0)
 
         # print("self.replay data", self.replay_data)
@@ -2775,7 +2832,7 @@ class PointCloudUpdater:
 
                 
 
-                
+            
 
             if(volumetric_three_d_points_far_lumen is not None):
                 far_vpC_points=o3d.geometry.PointCloud()
@@ -2806,8 +2863,11 @@ class PointCloudUpdater:
                 #     self.volumetric_far_point_cloud.points = far_vpC_points.points
                 #     self.volumetric_far_point_cloud.colors = far_vpC_points.colors
 
+                
 
                 if(self.extend == 1):
+
+                    
 
                     self.volumetric_far_point_cloud.points.extend(far_vpC_points.points)
                     self.volumetric_far_point_cloud.colors.extend(far_vpC_points.colors)
