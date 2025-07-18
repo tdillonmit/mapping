@@ -27,6 +27,7 @@ from keras.layers import TFSMLayer
 from tensorflow.keras.models import load_model
 from tensorflow.keras.layers import ReLU, Activation, TimeDistributed
 from segmentation_helpers import BlurPool
+import matplotlib.pyplot as plt
 
 # from segmentation_helpers import build_temporal_segmenter 
 
@@ -429,7 +430,7 @@ class PointCloudUpdater:
         # initialize view above the phantom
         view_control_1 = self.vis.get_view_control()
 
-        view_control_1.set_up([0,-1,0])
+        view_control_1.set_up([0,1,0])
 
         view_control_1.set_front([0,0,-1])
 
@@ -485,6 +486,7 @@ class PointCloudUpdater:
         self.replay = False
 
         self.funsr_only = 0
+        self.once = 0
 
         # for speed pruning
         transform_time = rospy.Time.now()
@@ -657,6 +659,7 @@ class PointCloudUpdater:
 
         # dont load extend
         # self.extend = config_yaml['extend']
+        
 
         self.tsdf_map = config_yaml['tsdf_map']
 
@@ -1280,13 +1283,18 @@ class PointCloudUpdater:
 
 
         # Get current camera parameters
-        view_control_1 = self.vis.get_view_control()
+        self.view_control_1 = self.vis.get_view_control()
 
-        view_control_1.set_up([0,-1,0])
+        self.view_control_1.set_up([0,-1,0])
 
-        view_control_1.set_front([0,0,-1])
+        self.view_control_1.set_front([0,0,-1])
+
         
-        view_control_1.set_zoom(0.25)
+        
+        self.view_control_1.set_zoom(0.25)
+
+        # roll 180 degrees
+        # view_control_1.rotate(180, 0) 
 
 
 
@@ -1370,9 +1378,13 @@ class PointCloudUpdater:
             view_control_1.set_up([0,-1,0])
 
             view_control_1.set_front([0,0,-1])
-            
+
+
 
             view_control_1.set_zoom(0.25)
+
+            # roll 180 degrees
+            # view_control_1.rotate(180, 0) 
 
 
             
@@ -1389,8 +1401,8 @@ class PointCloudUpdater:
         
 
 
-        # self.ct_centroids = np.load(self.write_folder + '/ct_centroids.npy')
         # NOte that ivus centroids have been used here!!!
+        # self.ct_centroids = np.load(self.write_folder + '/ct_centroids.npy')
         self.ct_centroids = np.load(self.write_folder + '/ivus_centroids.npy')
 
 
@@ -1428,9 +1440,34 @@ class PointCloudUpdater:
 
         self.constraint_locations = np.asarray(ct_centroid_pc.points)
         
+       
+        colors = [
+            [1.0, 0.0, 1.0],  # Purplw
+            [0.0, 1.0, 0.0],  # Green
+            [0.0, 0.0, 1.0],  # Blue
+            [1.0, 1.0, 0.0]   # Yellow
+        ]
+
+        print("number of ct centroids are", self.ct_centroids.shape[0])
+        num_colors_needed = self.ct_centroids.shape[0]
+        extended_colors = (colors * (num_colors_needed // 4)) + colors[:num_colors_needed % 4]
+        colors = extended_colors[:num_colors_needed]
+
+        self.ct_spheres = o3d.geometry.TriangleMesh()
+        for centroid, color in zip(self.ct_centroids,colors):
+            print("centroid", centroid)
+            print("color", color)
+            new_sphere = get_sphere_cloud([centroid], 0.004, 20, [0,1,0])
+            print(new_sphere)
+            new_sphere.paint_uniform_color(color)
+            self.ct_spheres = self.ct_spheres + new_sphere
+
+
         
+
+
         # self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.00225, 20, [0,1,0])
-        self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.004, 20, [0,1,0])
+        # self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.004, 20, [0,1,0])
         self.knn_idxs_spheres, self.knn_weights_spheres = precompute_knn_mapping(self.registered_ct_mesh, self.ct_centroids, k=5)
 
     
@@ -1448,7 +1485,7 @@ class PointCloudUpdater:
 
         # DELETED FOR FEVAR
         self.vis2.add_geometry(self.ct_spheres)
-
+        self.vis.add_geometry(self.ct_spheres)
         self.vis2.add_geometry(self.registered_ct_mesh_2)
         self.vis2.add_geometry(self.tracker)
 
@@ -1480,16 +1517,30 @@ class PointCloudUpdater:
         # Get current camera parameters
         view_control_1 = self.vis.get_view_control()
 
+        points = np.asarray(self.registered_ct_lineset.points)  # Convert point cloud to numpy array
+        self.registered_centroid = np.mean(points, axis=0) 
+        view_control_1.set_lookat(self.registered_centroid)
+
         view_control_1.set_up([0,-1,0])
 
-        view_control_1.set_front([0,0,-1])
+
+        view_control_1.set_front([0,0,1])
         
 
         view_control_1.set_zoom(0.25)
 
+        # roll 180 degrees
+        # view_control_1.rotate(180, 0) 
 
-        points = np.asarray(self.registered_ct_lineset.points)  # Convert point cloud to numpy array
-        self.registered_centroid = np.mean(points, axis=0) 
+        self.tsdf_map = 0
+
+        self.view_control_1 = view_control_1
+
+
+        
+
+
+        
 
 
 
@@ -1803,6 +1854,8 @@ class PointCloudUpdater:
         view_control_1.set_up([0,-1,0])
         view_control_1.set_front([0,0,-1])
         view_control_1.set_zoom(0.25)
+
+        
 
         
   
@@ -3063,14 +3116,17 @@ class PointCloudUpdater:
                 position_tracker = TW_EM[:3,3]
                 average_point = (centroid+position_tracker)/2
                 lookat = average_point
+
+                
                 view_control_1.set_lookat(lookat)
+                
 
             
         if(self.registered_ct ==1 or self.funsr_only == 1):
 
 
-                view_control_1 = self.vis.get_view_control()
-                camera_parameters_1 = view_control_1.convert_to_pinhole_camera_parameters()
+                # view_control_1 = self.vis.get_view_control()
+                camera_parameters_1 = self.view_control_1.convert_to_pinhole_camera_parameters()
                 
                 # points = np.asarray(self.registered_ct_lineset.points)  # Convert point cloud to numpy array
                 # centroid = np.mean(points, axis=0) 
@@ -3086,13 +3142,24 @@ class PointCloudUpdater:
                 lookat = average_point
 
 
-                view_control_1.set_lookat(lookat)
-
                 
-                # Define the up direction explicitly (same as before)
-                up = np.array([0, -1, 0])
+
+        
+                
 
                 # what is the up axis of the vessel - flip this depending on side of table
+
+               
+
+                if(self.once == 0):
+                    up = np.array([0, -1, 0])
+                    self.view_control_1.set_up(up)
+                    self.view_control_1.set_front([0,0,-1])
+                    self.once=1
+                    self.view_control_1.set_zoom(0.25)
+
+                
+                self.view_control_1.set_lookat(lookat)
                 
                 
 
