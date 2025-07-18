@@ -1278,6 +1278,9 @@ class PointCloudUpdater:
         self.vis.add_geometry(self.far_pc)
         self.vis2.add_geometry(self.far_pc)
 
+        copy_far_pc = copy.deepcopy(self.far_pc)
+        self.far_pc_points = np.asarray(copy_far_pc.points)
+
         
         self.vis2.add_geometry(self.tracker)
 
@@ -1444,7 +1447,7 @@ class PointCloudUpdater:
         colors = [
             [1.0, 0.0, 1.0],  # Purplw
             [0.0, 1.0, 0.0],  # Green
-            [0.0, 0.0, 1.0],  # Blue
+            [1.0, 0.64, 0.0],  # Orange
             [1.0, 1.0, 0.0]   # Yellow
         ]
 
@@ -1469,6 +1472,9 @@ class PointCloudUpdater:
         # self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.00225, 20, [0,1,0])
         # self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.004, 20, [0,1,0])
         self.knn_idxs_spheres, self.knn_weights_spheres = precompute_knn_mapping(self.registered_ct_mesh, self.ct_centroids, k=5)
+
+
+        
 
     
 
@@ -1497,6 +1503,10 @@ class PointCloudUpdater:
         self.far_pc.paint_uniform_color([0,0,1])
         self.vis.add_geometry(self.far_pc)
 
+        copy_far_pc = copy.deepcopy(self.far_pc)
+        self.far_pc_points = np.asarray(copy_far_pc.points)
+        
+
         
         # self.vis.remove_geometry(self.catheter)
 
@@ -1504,6 +1514,8 @@ class PointCloudUpdater:
 
         # DELETED FOR FEVAR
         # self.vis.add_geometry(self.ct_spheres)
+
+        self.knn_idxs_far_pc, self.knn_weights_far_pc = precompute_knn_mapping(self.registered_ct_mesh, self.far_pc_points, k=3)
 
 
         
@@ -2926,6 +2938,12 @@ class PointCloudUpdater:
                     #     print("IVUS live mesh deformation not working")
                     #     pass
 
+                    # change the blue ivus far pc based on deformation
+                    test_far_pc = copy.deepcopy(self.far_pc_points)
+                    far_pc_deformed_points = deform_points_using_knn(self.registered_ct_mesh, deformed_mesh,  self.knn_idxs_far_pc, self.knn_weights_far_pc, self.coarse_template_vertices, self.far_pc_points, self.adjacency_matrix)
+                    self.far_pc.points =  o3d.utility.Vector3dVector(far_pc_deformed_points)
+                    self.vis.update_geometry(self.far_pc)
+
                 if(self.extend == 1 and (self.dissection_mapping == 1 or self.refine==1)):
                     # prevent memory issues by commenting this out
                     self.volumetric_near_point_cloud.points.extend(near_vpC_points.points)
@@ -2979,6 +2997,13 @@ class PointCloudUpdater:
                     # except:
                     #     print("EM live mesh deformation not working")
                     #     pass
+
+                    
+                    # change the blue ivus far pc based on deformation
+                    test_far_pc = copy.deepcopy(self.far_pc_points)
+                    far_pc_deformed_points = deform_points_using_knn(self.registered_ct_mesh, deformed_mesh,  self.knn_idxs_far_pc, self.knn_weights_far_pc, self.coarse_template_vertices, test_far_pc, self.adjacency_matrix)
+                    self.far_pc.points =  o3d.utility.Vector3dVector(far_pc_deformed_points)
+                    self.vis.update_geometry(self.far_pc)
 
 
                 
