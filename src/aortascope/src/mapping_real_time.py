@@ -205,6 +205,15 @@ class PointCloudUpdater:
         self.guidewire_pointcloud_base.points = o3d.utility.Vector3dVector(base_points)
         self.guidewire_pointcloud_base.paint_uniform_color([0,1,0])
         self.guidewire_pointcloud = o3d.geometry.PointCloud()
+
+        self.bending_segment = o3d.geometry.TriangleMesh()
+        self.bending_segment.paint_uniform_color([0.678, 0.847, 0.902])
+        self.steerable_arc_length = 0.025
+
+        self.catheter_shaft = o3d.geometry.TriangleMesh()
+        self.catheter_shaft.paint_uniform_color([0,0,1])
+       
+        
         
         self.previous_transform=np.eye(4)
         self.previous_transform_1=np.eye(4)
@@ -212,6 +221,7 @@ class PointCloudUpdater:
         self.previous_catheter_transform=np.eye(4)
         self.previous_tracker_transform=np.eye(4)
         self.previous_guidewire_transform=np.eye(4)
+        self.previous_bending_transform = np.eye(4)
 
         self.vis.add_geometry(self.catheter)
         self.vis.add_geometry(self.guidewire_cylinder)
@@ -220,6 +230,8 @@ class PointCloudUpdater:
         self.vis.add_geometry(self.tracker_frame)
         self.vis.add_geometry(self.baseframe)
         self.vis.add_geometry(self.guidewire_pointcloud)
+        self.vis.add_geometry(self.bending_segment)
+        self.vis.add_geometry(self.catheter_shaft)
 
     
         # ----- INITIALIZE BOUNDING BOX ----- #
@@ -672,6 +684,8 @@ class PointCloudUpdater:
         self.live_deformation = config_yaml['live_deformation']
 
         self.guidewire = config_yaml['guidewire']
+
+        self.steerable = config_yaml['steerable']
 
         self.double_display = config_yaml['double_display']
 
@@ -1313,6 +1327,8 @@ class PointCloudUpdater:
 
         self.guidewire = 1
 
+        # self.steerable = 1
+
         with open('/home/tdillon/mapping/src/calibration_parameters_guidewire.yaml', 'r') as file:
             calib_yaml_gw = yaml.safe_load(file)
 
@@ -1451,6 +1467,9 @@ class PointCloudUpdater:
             [1.0, 1.0, 0.0]   # Yellow
         ]
 
+
+        
+
         print("number of ct centroids are", self.ct_centroids.shape[0])
         num_colors_needed = self.ct_centroids.shape[0]
         extended_colors = (colors * (num_colors_needed // 4)) + colors[:num_colors_needed % 4]
@@ -1501,7 +1520,9 @@ class PointCloudUpdater:
         if(self.refine==1):
             self.far_pc = o3d.io.read_point_cloud(self.write_folder + '/volumetric_far_point_cloud_refine.ply')
         self.far_pc.paint_uniform_color([0,0,1])
-        self.vis.add_geometry(self.far_pc)
+
+        # VISUALIZE BLUE FAR PC
+        # self.vis.add_geometry(self.far_pc)
 
         copy_far_pc = copy.deepcopy(self.far_pc)
         self.far_pc_points = np.asarray(copy_far_pc.points)
@@ -1568,7 +1589,7 @@ class PointCloudUpdater:
 
         self.write_folder = rospy.get_param('dataset', 0) 
 
-        self.deeplumen_on = 0
+        self.deeplumen_on = 1
         self.deeplumen_lstm_on = 0
 
         if(self.write_folder ==0):
@@ -1661,8 +1682,7 @@ class PointCloudUpdater:
 
         # GUI SPECIFIC - self.write_folder = rospy.get_param('dataset', 0) 
 
-        self.deeplumen_on = 0
-        self.deeplumen_lstm_on = 0
+        
 
         if(self.write_folder ==0):
             self.write_folder = self.prompt_for_folder()
@@ -1729,6 +1749,9 @@ class PointCloudUpdater:
             #release the applied deformation to these points but still allow them to move with adjacent nodes, just don't prescribe a deformation to them
             self.free_branch_radius = 0.0065
             self.free_branch_indices = get_all_nodes_inside_radius(self.free_branch_locations, self.free_branch_radius, self.registered_ct_mesh)
+
+            # WE ARE OMMITTING FREE BRANCH
+            # self.free_branch_indices = None
             
             # visualize the constraints if desired
             # test_pc= o3d.geometry.PointCloud() 
@@ -2067,10 +2090,10 @@ class PointCloudUpdater:
         start_total_time = time.time()
         # this is the shortest number of lines it takes to grab the transform once image arrives
         # transform_time = rospy.Time(0) #get the most recent transform
-        transform_time = msg.header.stamp #get the most recent transform
+        self.transform_time = msg.header.stamp #get the most recent transform
 
         if(self.test_transform ==1): 
-            transform_time = rospy.Time(0)
+            self.transform_time = rospy.Time(0)
         
         # Assuming you have the frame IDs for your transform
         ref_frame = 'ascension_origin'
@@ -2080,7 +2103,7 @@ class PointCloudUpdater:
 
         try:
             # Lookup transform
-            TW_EM = self.tf_buffer.lookup_transform(ref_frame, dest_frame, transform_time)
+            TW_EM = self.tf_buffer.lookup_transform(ref_frame, dest_frame, self.transform_time)
         except (rospy.ROSException, tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
             rospy.logwarn("Failed to lookup transform")
             TW_EM = None
@@ -2153,7 +2176,7 @@ class PointCloudUpdater:
         TW_EM=transform_stamped_to_matrix(TW_EM)
 
         # prune fast probe moves
-        current_time_in_sec = transform_time.to_sec()
+        current_time_in_sec = self.transform_time.to_sec()
         self.smoothed_linear_speed = update_linear_speed_ema(TW_EM, current_time_in_sec, self.previous_transform_ema, self.previous_time_in_sec, self.smoothed_linear_speed)
         self.previous_time_in_sec = current_time_in_sec
         self.previous_transform_ema = TW_EM
@@ -2345,6 +2368,8 @@ class PointCloudUpdater:
         
 
         # ------ FIRST RETURN SEGMENTATION -------- #
+
+       
 
         # first return segmentation
         if(self.deeplumen_on == 0 and self.deeplumen_lstm_on == 0 and self.dest_frame== 'target1'):
@@ -3055,8 +3080,8 @@ class PointCloudUpdater:
                     
 
 
-                # OVERRIDE BRANCH PASS COLOURING
-                self.volumetric_far_point_cloud.paint_uniform_color([0,0,1])
+                # OVERRIDE BRANCH PASS COLOURING - this is needed for clustering later
+                # self.volumetric_far_point_cloud.paint_uniform_color([0,0,1])
 
 
             # self.vis.update_geometry(self.point_cloud)
@@ -3359,7 +3384,96 @@ class PointCloudUpdater:
                 self.guidewire_pointcloud.paint_uniform_color([0,1,0])
                 self.vis.update_geometry(self.guidewire_pointcloud)
 
+            if(self.steerable == 1):
 
+                ref_frame = 'ascension_origin'
+                steerable_frame = 'target1'
+
+                
+
+
+
+                try:
+                    # Lookup transform
+                    TW_EM_3 = self.tf_buffer.lookup_transform(ref_frame, steerable_frame, self.transform_time)
+                except (rospy.ROSException, tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+                    rospy.logwarn("Failed to lookup transform")
+                    TW_EM_3 = None
+
+                TW_EM_3 = transform_stamped_to_matrix(TW_EM_3)
+
+                # prerotates both frames 90 degrees clockwise
+                theta = np.pi / 2  # -90 degrees in radians
+                R_y = np.array([
+                    [np.cos(theta), 0, np.sin(theta)],
+                    [0,             1, 0],
+                    [-np.sin(theta), 0, np.cos(theta)]
+                ], dtype=float)
+
+                T_y = np.eye(4)
+                T_y[:3, :3] = R_y
+
+                base_rotated_y = TW_EM_3 @ T_y
+                tip_rotated_y = TW_EM @ T_y
+
+                arc_points, transform_needed = compute_arc_backwards_from_tip_and_base(tip_rotated_y, base_rotated_y, self.steerable_arc_length)
+
+
+                new_tube = create_tube_mesh_catheter(arc_points, radius=0.0015, segments=10)
+
+                self.bending_segment.vertices = new_tube.vertices
+                self.bending_segment.triangles = new_tube.triangles
+                self.bending_segment.paint_uniform_color([0.678, 0.847, 0.902])
+                self.bending_segment.compute_vertex_normals()
+                self.vis.update_geometry(self.bending_segment)
+
+                # find the shaft spline
+
+                aortic_centreline = np.asarray(self.centerline_pc.points)                
+
+                # p0 = aortic_centreline[-1, :]
+                # p1 = base_rotated_y[:3,3]
+                # t0 = aortic_centreline[-2, :] - aortic_centreline[-1,:]
+                # t0 = t0 / np.linalg.norm(t0)
+                # t1 = base_rotated_y[:3,2]
+                # t1 = t1 / np.linalg.norm(t1)
+
+                p0 = aortic_centreline[-1, :]
+                p1 = arc_points[0,:]
+                
+                t0 = aortic_centreline[-2, :] - aortic_centreline[-1,:]
+                t0 = t0 / np.linalg.norm(t0)
+
+                t1 = arc_points[1,:] - arc_points[0,:]
+                t1 = t1 / np.linalg.norm(t1)
+
+
+                arc_points = hermite_segment(p0, t0, p1, t1, n_points=50, tangents_are_directions=True, tension=1.0)
+
+                
+
+                # for modelling contact
+                # arc_points = iteratively_determine_hermite_segment(p0, t0, p1, t1, self.scene, n_points=50, tangents_are_directions=True, tension=1.0)
+                # arc_points = quintic_minimum_jerk_segment(p0, t0, p1, t1, n_points=50, tangents_are_directions=True, scale=1.0)
+
+                arc_points = deform_centerline_inside_lumen(arc_points, self.scene, self.registered_ct_mesh)
+
+                # aortic_centreline = np.asarray(self.centerline_pc.points)
+                # discrete_shaft_points = np.vstack((aortic_centreline[-1,:],))
+                # x_points, y_points, z_points = fit_3D_bspline(discrete_shaft_points, 0.0001)
+                # arc_points = np.column_stack((x_points,y_points,z_points))
+                # arc_points = np.vstack((arc_points,shaft_points))
+
+                shaft = create_tube_mesh_catheter(arc_points, radius=0.0015, segments=10)
+
+                self.catheter_shaft.vertices = shaft.vertices
+                self.catheter_shaft.triangles = shaft.triangles
+                self.catheter_shaft.paint_uniform_color([0,0,1])
+                self.catheter_shaft.compute_vertex_normals()
+                self.vis.update_geometry(self.catheter_shaft)
+
+
+                
         
 
         self.vis.poll_events()

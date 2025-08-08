@@ -48,6 +48,7 @@ registered_ct : 0
 registered_ct_dataset: user_has_not_defined
 live_deformation: 0
 guidewire: 0
+steerable: 0
 
 # double_display: 1
 double_display: 1

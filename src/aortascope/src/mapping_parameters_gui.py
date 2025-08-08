@@ -31,6 +31,49 @@ pullback_pub             = rospy.Publisher('/pullback', Int32, queue_size=1)
 replay_pub               = rospy.Publisher('/replay', Bool, queue_size=1)
 
 
+# reg_status_sub           = rospy.Subscriber('/reg_status', Int32, reg_status_cb)
+
+def update_label_from_param():
+    try:
+        # Get the current value of the 'reg_status' parameter
+        reg_status = rospy.get_param('/reg_status')
+        
+        # Update the label based on the reg_status value
+        if reg_status == 1:
+            root.percent.config(text="Closing mesh holes...")
+        elif reg_status == 2:
+            root.percent.config(text="Extracting centerline...")
+        elif reg_status == 3:
+            root.percent.config(text="Rigid transform of data...")
+        elif reg_status == 4:
+            root.percent.config(text="Filtering spurious points...")
+        elif reg_status == 5:
+            root.percent.config(text="FenFit correspondence estimation...")
+        elif reg_status == 6:
+            root.percent.config(text="Viterbi correspondence estimation...")
+        elif reg_status == 7:
+            root.percent.config(text="Saving data...")
+        elif reg_status == 8:
+            root.percent.config(text="Registration complete...")
+            return
+        elif reg_status == 9:
+            root.percent.config(text="Called CPD...")
+        
+        # Update the GUI once after all changes
+        root.update_idletasks()
+
+    except KeyError:
+        print("Parameter /reg_status not found yet.")
+
+    return True
+
+
+def start_parameter_check():
+    # Use root.after to check every 500ms (0.5 seconds)
+    continue_checking = update_label_from_param()
+    if continue_checking:
+        root.after(500, start_parameter_check)  # Continue checking every 500ms
+
 
 
 def start_record():
@@ -97,15 +140,17 @@ def call_register():
 
     # visualize = checkbox_var.get()
     visualize = 0
-    # root.percent.config(text = "Computing Registration")
-    # root.update_idletasks()
+
     print("calling registration indirectly")
     refine=0
+
+    # start checking here?
+    start_parameter_check()
+
     call_registration_indirectly(dataset, visualize, refine)
-    # root.percent.config(text = "Registration Complete")
-    # rospy.set_param('registration_done', 1)
+
     registration_done_pub.publish(True)
-    # root.update_idletasks()
+
 
 def load_previous_registration():
     registration_done_pub.publish(True)
@@ -236,8 +281,8 @@ try:
     # single display
     standard_font_size = int( 14  * 0.8)
     button_width = int(30 )  # Button width (characters)
-    button_height = int(1 )  # Button height (lines)
-    padding_y = int(17 * display_scale_factor * 0.4)
+    button_height = int(0.8 )  # Button height (lines)
+    padding_y = int(14 * display_scale_factor * 0.4)
     padding_x = int(105 * display_scale_factor)
 
     button_font = ("Arial", standard_font_size)  # Font size 14
@@ -300,17 +345,17 @@ try:
     # quit_button = Button(root, text="Quit Application", font=button_font, width=button_width, height=button_height, command = quit_aortascope)
     # quit_button.grid(row=13, column=0, padx=padding_x, pady=padding_y)
 
-    # sim_device = Button(root, text="Simulate Device Deployment", font=button_font, width=button_width, height=button_height, command = sim_device_deployment)
-    # sim_device.grid(row=13, column=0, padx=padding_x, pady=padding_y)
-
-    sim_device = Button(root, text="Load IVUS Mesh Only", font=button_font, width=button_width, height=button_height, command = load_previous_surface_geometry)
+    sim_device = Button(root, text="Simulate Device Deployment", font=button_font, width=button_width, height=button_height, command = sim_device_deployment)
     sim_device.grid(row=13, column=0, padx=padding_x, pady=padding_y)
+
+    # sim_device = Button(root, text="Load IVUS Mesh Only", font=button_font, width=button_width, height=button_height, command = load_previous_surface_geometry)
+    # sim_device.grid(row=13, column=0, padx=padding_x, pady=padding_y)
 
 
     # PROGRESS BAR AND PERCENTAGE
     
-    # root.percent = Label(root, text="", font=("Arial", 10))
-    # root.percent.grid(row=14, column=0)
+    root.percent = Label(root, text="", font=("Arial", 10))
+    root.percent.grid(row=14, column=0)
 
     # root.progress_bar = ttk.Progressbar(root, orient="horizontal", length=(500* display_scale_factor), mode="determinate", 
     #                             style="TProgressbar")
