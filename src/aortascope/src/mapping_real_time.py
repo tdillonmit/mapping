@@ -3422,9 +3422,6 @@ class PointCloudUpdater:
                 steerable_frame = 'target1'
 
                 
-
-
-
                 try:
                     # Lookup transform
                     TW_EM_3 = self.tf_buffer.lookup_transform(ref_frame, steerable_frame, self.transform_time)
@@ -3473,12 +3470,6 @@ class PointCloudUpdater:
 
                 aortic_centreline = np.asarray(self.centerline_pc.points)                
 
-                # p0 = aortic_centreline[-1, :]
-                # p1 = base_rotated_y[:3,3]
-                # t0 = aortic_centreline[-2, :] - aortic_centreline[-1,:]
-                # t0 = t0 / np.linalg.norm(t0)
-                # t1 = base_rotated_y[:3,2]
-                # t1 = t1 / np.linalg.norm(t1)
 
                 p0 = aortic_centreline[-1, :]
                 p1 = arc_points[0,:]
@@ -3493,19 +3484,12 @@ class PointCloudUpdater:
                 # arc_points = hermite_segment(p0, t0, p1, t1, n_points=25, tangents_are_directions=True, tension=1.0)
 
                 
-
-                # for modelling contact
-                # arc_points = iteratively_determine_hermite_segment(p0, t0, p1, t1, self.scene, n_points=50, tangents_are_directions=True, tension=1.0)
-                arc_points = quintic_minimum_jerk_segment_fast(p0, t0, p1, t1, n_points=20, tangents_are_directions=True, scale=1.0)
+                arc_points = quintic_minimum_jerk_segment_fast(p0, t0, p1, t1, n_points=20, tangents_are_directions=True, scale=0.25)
 
                 # working version
                 # arc_points = deform_centerline_inside_lumen(arc_points, self.scene, self.registered_ct_mesh)
 
-                # aortic_centreline = np.asarray(self.centerline_pc.points)
-                # discrete_shaft_points = np.vstack((aortic_centreline[-1,:],))
-                # x_points, y_points, z_points = fit_3D_bspline(discrete_shaft_points, 0.0001)
-                # arc_points = np.column_stack((x_points,y_points,z_points))
-                # arc_points = np.vstack((arc_points,shaft_points))
+          
 
                 shaft = create_tube_mesh_catheter_fast(arc_points, radius=0.0015, segments=8)
 
