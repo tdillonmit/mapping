@@ -147,7 +147,7 @@ def call_register():
     # start checking here?
     start_parameter_check()
 
-    call_registration_indirectly(dataset, visualize, refine)
+    call_registration_indirectly(dataset, visualize, refine, 0)
 
     registration_done_pub.publish(True)
 

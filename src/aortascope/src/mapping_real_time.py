@@ -208,7 +208,11 @@ class PointCloudUpdater:
 
         self.bending_segment = o3d.geometry.TriangleMesh()
         self.bending_segment.paint_uniform_color([0.678, 0.847, 0.902])
-        self.steerable_arc_length = 0.025
+        # self.steerable_arc_length = 0.025
+        self.steerable_arc_length = 0.028
+
+        self.catheter_base_frame = o3d.geometry.TriangleMesh.create_coordinate_frame()
+        self.catheter_base_frame .scale(self.frame_scaling,center=[0,0,0])
 
         self.catheter_shaft = o3d.geometry.TriangleMesh()
         self.catheter_shaft.paint_uniform_color([0,0,1])
@@ -222,6 +226,7 @@ class PointCloudUpdater:
         self.previous_tracker_transform=np.eye(4)
         self.previous_guidewire_transform=np.eye(4)
         self.previous_bending_transform = np.eye(4)
+        self.previous_catheter_base = np.eye(4)
 
         self.vis.add_geometry(self.catheter)
         self.vis.add_geometry(self.guidewire_cylinder)
@@ -232,6 +237,7 @@ class PointCloudUpdater:
         self.vis.add_geometry(self.guidewire_pointcloud)
         self.vis.add_geometry(self.bending_segment)
         self.vis.add_geometry(self.catheter_shaft)
+        self.vis.add_geometry(self.catheter_base_frame)
 
     
         # ----- INITIALIZE BOUNDING BOX ----- #
@@ -445,6 +451,8 @@ class PointCloudUpdater:
         view_control_1.set_up([0,1,0])
 
         view_control_1.set_front([0,0,-1])
+
+        self.view_control_1 = view_control_1
 
 
         self.refine = 0
@@ -998,6 +1006,18 @@ class PointCloudUpdater:
         # this is important!
         self.branch_pass = 0
 
+
+        # initialize view
+        view_control_1 = self.vis.get_view_control()
+
+        view_control_1.set_up([0,-1,0])
+
+        view_control_1.set_front([0,0,-1])
+
+        view_control_1.set_zoom(0.5)
+
+        self.view_control_1 = view_control_1
+
     
 
     def funsr_started(self):
@@ -1350,6 +1370,8 @@ class PointCloudUpdater:
     def load_registetered_ct(self):
 
         no_reg=0
+
+        self.once = 0
 
         print("loading registration lineset")
         self.registered_ct_lineset = o3d.io.read_line_set(self.write_folder+ '' + '/final_registration.ply')
@@ -2181,7 +2203,7 @@ class PointCloudUpdater:
         self.previous_time_in_sec = current_time_in_sec
         self.previous_transform_ema = TW_EM
 
-        print("smoothed linear speed:",self.smoothed_linear_speed)
+        # print("smoothed linear speed:",self.smoothed_linear_speed)
         if self.smoothed_linear_speed > 0.15:  # max ~50 Hz
             print("probe speed too fast! omit image")
             return
@@ -3168,7 +3190,17 @@ class PointCloudUpdater:
                 lookat = average_point
 
                 
-                view_control_1.set_lookat(lookat)
+                if(self.once == 0):
+                    up = np.array([0, -1, 0])
+                    self.view_control_1.set_up(up)
+                    self.view_control_1.set_front([0,0,-1])
+                    self.once=1
+                    self.view_control_1.set_zoom(0.5)
+
+                
+                self.view_control_1.set_lookat(lookat)
+
+                
                 
 
             
@@ -3416,16 +3448,26 @@ class PointCloudUpdater:
                 base_rotated_y = TW_EM_3 @ T_y
                 tip_rotated_y = TW_EM @ T_y
 
+
+
                 arc_points, transform_needed = compute_arc_backwards_from_tip_and_base(tip_rotated_y, base_rotated_y, self.steerable_arc_length)
 
-
-                new_tube = create_tube_mesh_catheter(arc_points, radius=0.0015, segments=10)
+                new_tube = create_tube_mesh_catheter_fast(arc_points, radius=0.0015, segments=7)
 
                 self.bending_segment.vertices = new_tube.vertices
                 self.bending_segment.triangles = new_tube.triangles
                 self.bending_segment.paint_uniform_color([0.678, 0.847, 0.902])
                 self.bending_segment.compute_vertex_normals()
                 self.vis.update_geometry(self.bending_segment)
+
+                
+
+                
+
+                self.catheter_base_frame.transform(get_transform_inverse(self.previous_catheter_base))
+                self.catheter_base_frame.transform(TW_EM_3)
+                self.vis.update_geometry(self.catheter_base_frame)
+                self.previous_catheter_base=TW_EM_3
 
                 # find the shaft spline
 
@@ -3441,22 +3483,23 @@ class PointCloudUpdater:
                 p0 = aortic_centreline[-1, :]
                 p1 = arc_points[0,:]
                 
-                t0 = aortic_centreline[-2, :] - aortic_centreline[-1,:]
+                t0 = aortic_centreline[-5, :] - aortic_centreline[-1,:]
                 t0 = t0 / np.linalg.norm(t0)
 
                 t1 = arc_points[1,:] - arc_points[0,:]
                 t1 = t1 / np.linalg.norm(t1)
 
 
-                arc_points = hermite_segment(p0, t0, p1, t1, n_points=50, tangents_are_directions=True, tension=1.0)
+                # arc_points = hermite_segment(p0, t0, p1, t1, n_points=25, tangents_are_directions=True, tension=1.0)
 
                 
 
                 # for modelling contact
                 # arc_points = iteratively_determine_hermite_segment(p0, t0, p1, t1, self.scene, n_points=50, tangents_are_directions=True, tension=1.0)
-                # arc_points = quintic_minimum_jerk_segment(p0, t0, p1, t1, n_points=50, tangents_are_directions=True, scale=1.0)
+                arc_points = quintic_minimum_jerk_segment_fast(p0, t0, p1, t1, n_points=20, tangents_are_directions=True, scale=1.0)
 
-                arc_points = deform_centerline_inside_lumen(arc_points, self.scene, self.registered_ct_mesh)
+                # working version
+                # arc_points = deform_centerline_inside_lumen(arc_points, self.scene, self.registered_ct_mesh)
 
                 # aortic_centreline = np.asarray(self.centerline_pc.points)
                 # discrete_shaft_points = np.vstack((aortic_centreline[-1,:],))
@@ -3464,7 +3507,7 @@ class PointCloudUpdater:
                 # arc_points = np.column_stack((x_points,y_points,z_points))
                 # arc_points = np.vstack((arc_points,shaft_points))
 
-                shaft = create_tube_mesh_catheter(arc_points, radius=0.0015, segments=10)
+                shaft = create_tube_mesh_catheter_fast(arc_points, radius=0.0015, segments=8)
 
                 self.catheter_shaft.vertices = shaft.vertices
                 self.catheter_shaft.triangles = shaft.triangles
