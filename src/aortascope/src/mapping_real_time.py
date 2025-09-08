@@ -84,7 +84,7 @@ class PointCloudUpdater:
 
         self.extend = 0
 
-
+        
         # AORTASCOPE CONSTANTS
 
         # ------- INITIALIZE DEEPLUMEN ML MODEL ------- #
@@ -354,6 +354,10 @@ class PointCloudUpdater:
         # TSDF 
         # whole lumen
         self.voxel_size = 0.002
+
+        if(self.gating == 1):
+            self.voxel_size = 0.0025
+
         self.sdf_trunc = 3 * self.voxel_size
         # self.tsdf_volume = SimpleTsdfIntegrator(self.voxel_size, sdf_trunc)
         self.tsdf_volume = FastTsdfIntegrator(self.voxel_size, self.sdf_trunc)
@@ -652,7 +656,7 @@ class PointCloudUpdater:
         # save data?
         self.record = config_yaml['record']
 
-        self.record_poses =0
+        self.record_poses =config_yaml['record_poses']
         
         self.save_replay_data = config_yaml['save_replay_data']
 
@@ -764,15 +768,22 @@ class PointCloudUpdater:
         self.test_image = 0
         self.test_transform = 0
 
+        self.write_folder = rospy.get_param('dataset',0)
+
+    
         # load the calibration file for the REPLAYED dataset - note this means you will have that calibration file loaded when you 
         # go back to aortscope real time mapping
         with open(self.write_folder + '/calibration_parameters_ivus.yaml', 'r') as file:
             self.calib_yaml = yaml.safe_load(file)
 
+        print("loaded calibration file for dataset:",  self.write_folder)
+
         self.angle = self.calib_yaml['/angle']
         self.translation = self.calib_yaml['/translation']
         self.radial_offset = self.calib_yaml['/radial_offset']
         self.o_clock = self.calib_yaml['/oclock']
+
+        print("offset angle is!", self.angle)
 
 
         # rospy.set_param('replay', 0)
@@ -795,6 +806,8 @@ class PointCloudUpdater:
 
         try:
             self.vis.remove_geometry(self.volumetric_near_point_cloud)
+            # self.volumetric_near_point_cloud = o3d.geometry.PointCloud()
+            # self.vis.add_geometry(self.volumetric_near_point_cloud)
         except:
             print("no volumetric near point cloud present")
 
@@ -877,9 +890,12 @@ class PointCloudUpdater:
                 # pc_updater.image_callback(grayscale_image, TW_EM, i, model, dataset_name, gating, bin_number, pC_map, esdf_map, tsdf_map, killingfusion_save, dissection_parameterize, esdf_smoothing, certainty_coloring, vpC_map)
                 self.append_image_transform_pair(TW_EM, grayscale_image)
 
-            except KeyboardInterrupt:
-                print("Ctrl+C detected, stopping visualizer...")
-                self.stop()  #fake function that throws an exception
+            except:
+                print("image skipped on replay!")
+
+            # except KeyboardInterrupt:
+            #     print("Ctrl+C detected, stopping visualizer...")
+            #     self.stop()  #fake function that throws an exception
 
         try:
             self.vis.remove_geometry(self.processed_centreline)
@@ -914,16 +930,16 @@ class PointCloudUpdater:
             self.record = 0
             
   
-            o3d.io.write_point_cloud(self.write_folder +  "/volumetric_near_point_cloud.ply", pc_updater.volumetric_near_point_cloud)
+            o3d.io.write_point_cloud(self.write_folder +  "/volumetric_near_point_cloud.ply", self.volumetric_near_point_cloud)
 
-            o3d.io.write_point_cloud(self.write_folder +  "/volumetric_far_point_cloud.ply", pc_updater.volumetric_far_point_cloud)
+            o3d.io.write_point_cloud(self.write_folder +  "/volumetric_far_point_cloud.ply", self.volumetric_far_point_cloud)
 
-            o3d.io.write_point_cloud(self.write_folder +  "/orifice_center_pc.ply", pc_updater.orifice_center_point_cloud)
+            o3d.io.write_point_cloud(self.write_folder +  "/orifice_center_pc.ply", self.orifice_center_point_cloud)
 
-            o3d.io.write_triangle_mesh(self.write_folder  +  "/tsdf_mesh_near_lumen.ply", pc_updater.mesh_near_lumen)
+            o3d.io.write_triangle_mesh(self.write_folder  +  "/tsdf_mesh_near_lumen.ply", self.mesh_near_lumen)
 
             # for evaluation purposes
-            o3d.io.write_point_cloud(self.write_folder +  "/boundary_near_point_cloud.ply", pc_updater.boundary_near_point_cloud)
+            o3d.io.write_point_cloud(self.write_folder +  "/boundary_near_point_cloud.ply", self.boundary_near_point_cloud)
 
 
             # do spline smoothing in post processing
@@ -937,7 +953,11 @@ class PointCloudUpdater:
                     self.processed_centreline.points.extend(o3d.utility.Vector3dVector(centrepoints))
                     self.processed_centreline.paint_uniform_color([1,0,0])
 
-            o3d.io.write_point_cloud(self.write_folder +  "/smoothed_bspline_centreline.ply", pc_updater.processed_centreline)
+            o3d.io.write_point_cloud(self.write_folder +  "/smoothed_bspline_centreline.ply", self.processed_centreline)
+
+
+        print("saved! restart aortascope")
+        self.vis.run()
 
 
           
@@ -1446,7 +1466,14 @@ class PointCloudUpdater:
         # self.ct_centroids = np.load(self.write_folder + '/ct_centroids.npy')
         self.ct_centroids = np.load(self.write_folder + '/ivus_centroids.npy')
 
-
+        # only load CORRESPONDING ivus_centroids to remove false positives
+        load_corres = 1
+        print('before crop', self.ct_centroids)
+        if(load_corres ==1):
+            corres_original = np.load(self.write_folder + '/corres_original.npy')
+            corres_original_ivus = corres_original[:,1]
+            self.ct_centroids = self.ct_centroids[corres_original_ivus,:]
+            print('after crop', self.ct_centroids)
         
 
 
@@ -1482,10 +1509,12 @@ class PointCloudUpdater:
         self.constraint_locations = np.asarray(ct_centroid_pc.points)
         
        
+        
+
         colors = [
-            [1.0, 0.0, 1.0],  # Purplw
+            [0.5, 0.0, 0.0],  # Maroon
             [0.0, 1.0, 0.0],  # Green
-            [1.0, 0.64, 0.0],  # Orange
+            [0.0, 0.0, 1.0],  # Blue
             [1.0, 1.0, 0.0]   # Yellow
         ]
 
@@ -1501,7 +1530,7 @@ class PointCloudUpdater:
         for centroid, color in zip(self.ct_centroids,colors):
             print("centroid", centroid)
             print("color", color)
-            new_sphere = get_sphere_cloud([centroid], 0.004, 20, [0,1,0])
+            new_sphere = get_sphere_cloud([centroid], 0.00275, 20, [0,1,0])
             print(new_sphere)
             new_sphere.paint_uniform_color(color)
             self.ct_spheres = self.ct_spheres + new_sphere
@@ -2101,6 +2130,7 @@ class PointCloudUpdater:
         if(self.replay ==1):
             self.replay_function()
             self.replay = 0
+            self.replay = False
             # rospy.set_param('replay', 0)
 
         # print("self.replay data", self.replay_data)
@@ -2807,10 +2837,15 @@ class PointCloudUpdater:
 
         # ---- KINEMATICS ---- #
 
-        angle=self.default_values['/angle'] 
-        translation=self.default_values['/translation'] 
-        radial_offset=self.default_values['/radial_offset'] 
-        oclock=self.default_values['/oclock'] 
+        # angle=self.default_values['/angle'] 
+        # translation=self.default_values['/translation'] 
+        # radial_offset=self.default_values['/radial_offset'] 
+        # oclock=self.default_values['/oclock'] 
+
+        angle=self.calib_yaml['/angle'] 
+        translation=self.calib_yaml['/translation'] 
+        radial_offset=self.calib_yaml['/radial_offset'] 
+        oclock=self.calib_yaml['/oclock'] 
 
        
         TEM_C = [[1,0,0,translation],[0,np.cos(angle),-np.sin(angle),radial_offset*np.cos(oclock)],[0,np.sin(angle),np.cos(angle),radial_offset*np.sin(oclock)],[0, 0, 0, 1]]
@@ -2991,6 +3026,9 @@ class PointCloudUpdater:
                     self.far_pc.points =  o3d.utility.Vector3dVector(far_pc_deformed_points)
                     self.vis.update_geometry(self.far_pc)
 
+
+                # if you want all the point cloud points (will be really slow)
+                # if(self.extend == 1):
                 if(self.extend == 1 and (self.dissection_mapping == 1 or self.refine==1)):
                     # prevent memory issues by commenting this out
                     self.volumetric_near_point_cloud.points.extend(near_vpC_points.points)
@@ -3054,7 +3092,7 @@ class PointCloudUpdater:
 
 
                 
-
+            print("branch pass:", self.branch_pass)
             
 
             if(volumetric_three_d_points_far_lumen is not None):
@@ -3162,6 +3200,51 @@ class PointCloudUpdater:
             view_control.set_up(up)
 
             view_control.set_zoom(0.01)
+
+            
+            # crop the mesh view as needed
+
+            # extrinsic = camera_parameters.extrinsic
+
+            # # Camera position in world coordinates
+            # cam_pos = np.linalg.inv(extrinsic)[:3, 3]
+
+        
+            # query_points_tensor = o3d.core.Tensor([cam_pos], dtype=o3d.core.Dtype.Float32)
+            # signed_distance = self.scene.compute_signed_distance(query_points_tensor)
+            # signed_distance_np = signed_distance.numpy()  # Convert to NumPy array
+            # signed_distance_np = signed_distance_np.squeeze()
+            
+
+            # if(signed_distance_np < 0):
+            #     print("INSIDE")
+            # else:
+            #     print("OUTSIDE")
+
+            #     vector_between = TW_EM[:3,3]  - cam_pos
+            #     vector_origin = cam_pos
+
+            #     # print("vector_between", vector_between)
+            #     # print("vector origin", vector_origin)
+
+            #     mesh_copy = copy.deepcopy(self.registered_ct_mesh)
+
+            #     mesh_cropped = ray_remove_hit_and_neighbors(self.registered_ct_mesh, self.scene,
+            #                      vector_origin,
+            #                      vector_between)
+
+            #     self.registered_ct_mesh.vertices = mesh_cropped.vertices
+            #     self.registered_ct_mesh.triangles = mesh_cropped.triangles
+            #     self.registered_ct_mesh.compute_vertex_normals()
+
+
+            #     self.vis.update_geometry(self.registered_ct_mesh)
+
+            #     self.registered_ct_mesh.vertices = mesh_copy.vertices
+            #     self.registered_ct_mesh.triangles = mesh_copy.triangles
+            #     self.registered_ct_mesh.compute_vertex_normals()
+
+
 
 
 
@@ -3416,7 +3499,7 @@ class PointCloudUpdater:
                 self.guidewire_pointcloud.paint_uniform_color([0,1,0])
                 self.vis.update_geometry(self.guidewire_pointcloud)
 
-            if(self.steerable == 1):
+            if(self.steerable == 1 and self.dest_frame=='target2'):
 
                 ref_frame = 'ascension_origin'
                 steerable_frame = 'target1'

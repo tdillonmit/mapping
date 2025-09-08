@@ -199,6 +199,8 @@ def stop_pullback():
 
 def call_replay():
     replay_pub.publish(True)
+    time.sleep(6)
+    replay_pub.publish(False)
 
 def close_gui():
     root.quit()
