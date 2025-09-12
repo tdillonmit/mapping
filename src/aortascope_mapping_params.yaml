@@ -16,14 +16,19 @@ save_replay_data: 1
 tsdf_map : 1
 
 # ML segmentation
-deeplumen_on : 1
+deeplumen_on : 0
+
 # model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/full_inkbit_aorta_2/weights.weights.h5
 # model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/combined_dataset/weights.h5
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/ex_vivo_pigs_mgh/weights.weights.h5
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/combined_inkbit_dataset/weights.weights.h5
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/ex_vivo_pigs_with_pva/weights.weights.h5
-model_path: /home/tdillon/segmentation/deepivus_trained_models/k_phantom_models_from_scratch/weights.weights.h5
+# model_path: /home/tdillon/segmentation/deepivus_trained_models/k_phantom_models_from_scratch/weights.weights.h5
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/hybrid_cnn_imbalanced_full/weights.weights.h5
+
+deeplumen_slim_on: 1
+model_path: /home/tdillon/segmentation/deepivus_trained_models/comprehensive_dataset_for_animal/weights.weights.h5
+
 
 
 deeplumen_lstm_on : 0
@@ -48,6 +53,7 @@ orifice_center_map: 1
 registered_ct : 0
 registered_ct_dataset: user_has_not_defined
 live_deformation: 0
+cardiac_deformation: 0
 guidewire: 0
 steerable: 0
 

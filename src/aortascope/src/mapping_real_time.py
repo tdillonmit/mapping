@@ -355,8 +355,11 @@ class PointCloudUpdater:
         # whole lumen
         self.voxel_size = 0.002
 
+        # if(self.gating == 1):
+        #     self.voxel_size = 0.0025
+
         if(self.gating == 1):
-            self.voxel_size = 0.0025
+            self.voxel_size = 0.005
 
         self.sdf_trunc = 3 * self.voxel_size
         # self.tsdf_volume = SimpleTsdfIntegrator(self.voxel_size, sdf_trunc)
@@ -619,6 +622,27 @@ class PointCloudUpdater:
 
             self.model = model
 
+        if(self.deeplumen_slim_on == 1):
+
+            
+
+            model = model7 = build_reduced_cnn_with_blurpool(input_shape=(224,224,3), num_classes=3)
+
+            model.summary()
+
+            
+            # sub branch segmentation
+            model.load_weights( self.model_path)  
+
+
+        
+            # model.summary()
+
+            # this makes compilation 20x faster!!
+            model = tf.function(model, jit_compile=True)
+
+            self.model = model
+
         if(self.deeplumen_lstm_on==1):
             
             
@@ -664,6 +688,8 @@ class PointCloudUpdater:
         self.tsdf_map = config_yaml['tsdf_map']
 
         self.deeplumen_on = config_yaml['deeplumen_on']
+
+        self.deeplumen_slim_on = config_yaml['deeplumen_slim_on']
 
         self.deeplumen_lstm_on = config_yaml['deeplumen_lstm_on']
 
@@ -755,11 +781,15 @@ class PointCloudUpdater:
 
     def gate_data(self):
 
+        # perform reconstruction of bin 3 and 8 and then register
+
         # change directory to gated folder
         self.write_folder = self.write_folder + '/gated'
         create_folder(self.write_folder )
         
         print("new folder after gating is:", self.write_folder )
+
+        # add just registration here for now ...
         
 
 
@@ -1045,6 +1075,7 @@ class PointCloudUpdater:
         rospy.set_param('funsr_started', 0)
         self.write_folder = rospy.get_param('dataset', 0)
         self.deeplumen_on = 0
+        self.deeplumen_slim_on = 0
         self.deeplumen_lstm_on = 0
         tf.keras.backend.clear_session()
         tf.compat.v1.reset_default_graph()
@@ -1065,6 +1096,7 @@ class PointCloudUpdater:
         print("registration started!")
         self.write_folder = rospy.get_param('dataset', 0)
         self.deeplumen_on = 0
+        self.deeplumen_slim_on = 0
         self.deeplumen_lstm_on = 0
         tf.keras.backend.clear_session()
         tf.compat.v1.reset_default_graph()
@@ -1315,14 +1347,43 @@ class PointCloudUpdater:
         self.extend = 0
         self.record = 0
 
+        # usually means doing an animal study so record!!
+        self.record_poses = 1
+
           
         # superimpose the completed surface geometry
+
         ivus_funsr_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/tsdf_mesh_near_lumen.ply')
-        ivus_funsr_lineset = create_wireframe_lineset_from_mesh(ivus_funsr_mesh)
-        ivus_funsr_lineset.paint_uniform_color([0,0,0])
-        self.vis.add_geometry(ivus_funsr_lineset)
+        # ivus_funsr_lineset = create_wireframe_lineset_from_mesh(ivus_funsr_mesh)
+        # ivus_funsr_lineset.paint_uniform_color([0,0,0])
+        # self.vis.add_geometry(ivus_funsr_lineset)
+        # ivus_funsr_mesh.paint_uniform_color([1,0,0])
+        # self.vis2.add_geometry(ivus_funsr_lineset)
+        # self.vis.add_geometry(ivus_funsr_lineset)
+        # ivus_funsr_mesh.paint_uniform_color([1,0,0])
+        # self.vis2.add_geometry(ivus_funsr_lineset)
+
+        # superimpose a mesh found from poisson reconstruction
+        
+        print("getting poisson mesh reconstruction ...")
+
+        pcd = ivus_funsr_mesh.sample_points_uniformly(number_of_points=100000)
+        ivus_funsr_mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=7)
+        ivus_funsr_mesh.compute_vertex_normals()
+        voxel_size = max(ivus_funsr_mesh.get_max_bound() - ivus_funsr_mesh.get_min_bound()) / 100
+        ivus_funsr_mesh = ivus_funsr_mesh.simplify_vertex_clustering(
+            voxel_size=voxel_size,
+            contraction=o3d.geometry.SimplificationContraction.Average)
         ivus_funsr_mesh.paint_uniform_color([1,0,0])
-        self.vis2.add_geometry(ivus_funsr_lineset)
+        self.vis.add_geometry(ivus_funsr_mesh)
+        self.vis2.add_geometry(ivus_funsr_mesh)
+
+
+        # add ivus centroid clusters
+        orifice_pc = o3d.io.read_point_cloud(dataset + "/orifice_center_pc.ply")
+        ivus_centroids = np.load(dataset + "/ivus_centroids.npy")
+        all_cluster_spheres = visualize_ivus_tsdf_clusters(orifice_pc, ivus_centroids)
+        self.vis.add_geometry(all_cluster_spheres)
 
         # adding raw volumetric far point cloud data
         self.far_pc = o3d.io.read_point_cloud(self.write_folder + '/volumetric_far_point_cloud.ply')
@@ -1335,8 +1396,9 @@ class PointCloudUpdater:
         copy_far_pc = copy.deepcopy(self.far_pc)
         self.far_pc_points = np.asarray(copy_far_pc.points)
 
-        
         self.vis2.add_geometry(self.tracker)
+
+
 
 
         # Get current camera parameters
@@ -1640,7 +1702,8 @@ class PointCloudUpdater:
 
         self.write_folder = rospy.get_param('dataset', 0) 
 
-        self.deeplumen_on = 1
+        self.deeplumen_on = 0
+        self.deeplumen_slim_on = 1
         self.deeplumen_lstm_on = 0
 
         if(self.write_folder ==0):
@@ -1651,6 +1714,12 @@ class PointCloudUpdater:
 
         self.extend = 0
         self.record = 0
+
+        self.image_batch=[]
+        self.tw_em_batch=[]
+
+        self.image_tags=[]
+        self.starting_index = 1
 
         if(self.dest_frame == 'target1'):
             print("assuming integrated catheter")
@@ -1770,7 +1839,7 @@ class PointCloudUpdater:
             self.load_registetered_ct()
             
 
-        if(self.live_deformation == 1):
+        if(self.live_deformation == 1 or self.cardiac_deformation ==1):
             self.constraint_radius=self.default_values['/constraint_radius'] 
 
             # don't deform the subbranches
@@ -1782,18 +1851,10 @@ class PointCloudUpdater:
             # don't constrain the subbranches, aortic endpoints only - need larger constraint radius to capture aortic valve orifice
             self.constraint_locations = np.vstack((np.asarray(self.centerline_pc.points)[0,:],np.asarray(self.centerline_pc.points)[-1,:]))
 
-            
-
-
             self.constraint_radius = 0.02
             
-
             # could also have no constraints if desirable (TAVR)
             # self.constraint_locations = np.empty((0,3))
-
-          
-          
-        
 
             self.constraint_indices = get_all_nodes_inside_radius(self.constraint_locations, self.constraint_radius, self.registered_ct_mesh)
 
@@ -1809,6 +1870,11 @@ class PointCloudUpdater:
             # test_pc.points = o3d.utility.Vector3dVector(np.asarray(self.registered_ct_mesh.vertices)[self.constraint_indices,:])
             # constraint_seeds = get_sphere_cloud(self.constraint_locations, 0.0025, 12, [0,0,1])
             # o3d.visualization.draw_geometries([test_pc, self.registered_ct_lineset, constraint_seeds])
+
+
+        if(self.cardiac_deformation==1):
+
+            
 
 
         if(self.dissection_mapping == 1):
@@ -1835,6 +1901,12 @@ class PointCloudUpdater:
 
 
         if(self.deeplumen_on ==1):
+    
+
+            if not hasattr(self, 'model'):
+                self.initialize_deeplumen_model()
+
+        if(self.deeplumen_slim_on ==1):
     
 
             if not hasattr(self, 'model'):
@@ -1873,6 +1945,7 @@ class PointCloudUpdater:
 
             # turn off ML components
             self.deeplumen_on = 0
+            self.deeplumen_slim_on = 0
             self.deeplumen_lstm_on = 0
 
             self.vis.remove_geometry(self.catheter)
@@ -1986,6 +2059,7 @@ class PointCloudUpdater:
         tf.keras.backend.clear_session()
         tf.compat.v1.reset_default_graph()
         self.deeplumen_on = 0
+        self.deeplumen_slim_on = 0
         self.deeplumen_lstm_on = 0
         self.extend = 0
         self.vpC_map = 0
@@ -2106,6 +2180,8 @@ class PointCloudUpdater:
         ecg_timestamp_in_seconds = ecg_timestamp_secs + (ecg_timestamp_nsecs * 1e-9)
 
         ecg_value = ecg_msg.data
+
+        self.ecg_latest = ecg_value
 
         if(self.record==1):
             self.ecg_times.append( ecg_timestamp_in_seconds)
@@ -2342,6 +2418,9 @@ class PointCloudUpdater:
 
         # print("TW_EM:", TW_EM)
 
+        # cv2.imshow("rgb_image", grayscale_image)
+        # cv2.waitKey(0)
+
         original_image = grayscale_image.copy()
         
 
@@ -2424,7 +2503,7 @@ class PointCloudUpdater:
        
 
         # first return segmentation
-        if(self.deeplumen_on == 0 and self.deeplumen_lstm_on == 0 and self.dest_frame== 'target1'):
+        if(self.deeplumen_on == 0 and self.deeplumen_slim_on == 0 and self.deeplumen_lstm_on == 0 and self.dest_frame== 'target1'):
 
             relevant_pixels=first_return_segmentation(grayscale_image,threshold, crop_index,self.gridlines)
             relevant_pixels=np.asarray(relevant_pixels).squeeze()
@@ -2506,9 +2585,9 @@ class PointCloudUpdater:
             # two_d_points=centred_pixels*scaling
             # three_d_points=np.hstack((np.zeros((two_d_points.shape[0], 1)),two_d_points)) 
 
-        if((self.deeplumen_on == 1 or self.deeplumen_lstm_on == 1) and self.dest_frame=='target1'):
+        if((self.deeplumen_on == 1 or (self.deeplumen_slim_on == 1 or self.deeplumen_lstm_on == 1)) and self.dest_frame=='target1'):
 
-            if(self.deeplumen_on == 1):
+            if(self.deeplumen_on == 1 or self.deeplumen_slim_on == 1):
             
                 # FOR DISSECTION IMPLEMENTATION LATER
 
@@ -3028,8 +3107,8 @@ class PointCloudUpdater:
 
 
                 # if you want all the point cloud points (will be really slow)
-                # if(self.extend == 1):
-                if(self.extend == 1 and (self.dissection_mapping == 1 or self.refine==1)):
+                if(self.extend == 1):
+                # if(self.extend == 1 and (self.dissection_mapping == 1 or self.refine==1)):
                     # prevent memory issues by commenting this out
                     self.volumetric_near_point_cloud.points.extend(near_vpC_points.points)
                 else:
@@ -3329,7 +3408,7 @@ class PointCloudUpdater:
                 
 
         # ---- APPEND TO ORIFICE CENTER PC ------ #
-        if(self.orifice_center_map == 1 and (self.deeplumen_on ==1 or self.deeplumen_lstm_on==1)):
+        if(self.orifice_center_map == 1 and (self.deeplumen_on ==1 or self.deeplumen_lstm_on==1 or self.deeplumen_slim_on)):
 
             if(orifice_center_three_d_points is not None):           
                 
@@ -3595,7 +3674,7 @@ class PointCloudUpdater:
 
     
             
-
+        
   
 
 

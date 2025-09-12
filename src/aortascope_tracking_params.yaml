@@ -17,7 +17,8 @@ save_replay_data: 0
 tsdf_map : 0
 
 # ML segmentation
-deeplumen_on : 1
+deeplumen_on : 0
+deeplumen_slim_on: 1
 # model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/full_inkbit_aorta_2/weights.weights.h5
 model_path: /home/tdillon/segmentation/deepivus_trained_models/k_phantom_models_from_scratch/weights.weights.h5
 # model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/combined_dataset/weights.h5
@@ -40,6 +41,7 @@ dissection_track: 0
 registered_ct : 1
 registered_ct_dataset: user_has_not_defined
 live_deformation: 0
+cardiac_deformation: 1
 guidewire: 1
 steerable: 1
 
