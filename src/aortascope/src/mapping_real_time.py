@@ -721,6 +721,8 @@ class PointCloudUpdater:
 
         self.live_deformation = config_yaml['live_deformation']
 
+        self.cardiac_deformation = config_yaml['cardiac_deformation']
+
         self.guidewire = config_yaml['guidewire']
 
         self.steerable = config_yaml['steerable']
@@ -789,7 +791,7 @@ class PointCloudUpdater:
         
         print("new folder after gating is:", self.write_folder )
 
-        # add just registration here for now ...
+        # collect all data -> gating -> replay 3, 8 -> register to 3 -> initialize cardiac motion (register to 8) -> load registered scan (with cardiac deformation on)
         
 
 
@@ -1875,6 +1877,35 @@ class PointCloudUpdater:
         if(self.cardiac_deformation==1):
 
             
+            # get the ecg calibration
+            t_start = rospy.Time.now()
+            t_start = t_start.to_sec()
+            delta = 0
+
+            ecg_calibration_data = []
+            while delta < 4.0:
+            # or while reg status not there
+
+                t_current = rospy.Time.now()
+                t_current = t_current.to_sec()
+                delta = t_current  - t_start
+                ecg_calibration_data.append(self.ecg_latest)
+
+            # initialize ecg parameters
+            self.ecg_threshold = calibrateThreshold(ecg_calibration_data)
+
+            # for initialize
+            self.previous_peak = rospy.Time.now()
+            self.previous_peak = self.previous_peak.to_sec()
+            self.period = rospy.Duration(1.0) 
+            self.period = self.period.to_sec()
+            self.previous_ecg = self.ecg_latest
+
+            
+
+            # load cardiac motion initialization
+            self.systole_locations = np.load(self.write_folder + '/systole_locations.npy')
+            self.diastole_locations = np.load(self.write_folder + '/diastole_locations.npy')
 
 
         if(self.dissection_mapping == 1):
@@ -3169,9 +3200,48 @@ class PointCloudUpdater:
                     self.far_pc.points =  o3d.utility.Vector3dVector(far_pc_deformed_points)
                     self.vis.update_geometry(self.far_pc)
 
+            # CARDIAC DEFORMATION
 
+            if(self.cardiac_deformation==1):
+      
+                self.ecg_previous > self.ecg_threshold and ecg_latest < self.ecg_threshold:
+                    
+                    most_recent_peak = rospy.Time.now()
+                    most_recent_peak = most_recent_peak.to_sec()
+                    self.period = most_recent_peak - self.previous_peak
+                    self.previous_peak = most_recent_peak 
+
+                t = rospy.Time.now()
+                t = t.to_sec()
+                phase_time = t % self.period      # time into current cycle (would be measured rather than calculated as remainder)
+                M = phase_time / self.period
+
+                # cardiac motion model (change as desired to make more realistic)
+                if(M < 0.75):
+                    alpha = -((4/3)*M) + (1)
+                elif(M >= 0.75):
+                    alpha = 4*(M-0.75)
+
+                deformed_mesh = o3d.geometry.TriangleMesh()
+                current_vertices = ((alpha*(self.diastole_locations - self.systole_locations)) + self.systole_locations)  # note M = 0 is systole
+                deformed_mesh.vertices = o3d.utility.Vector3dVector(current_vertices)
+
+                temp_lineset = create_wireframe_lineset_from_mesh(deformed_mesh)
+                self.registered_ct_lineset.points = temp_lineset.points
+                self.registered_ct_lineset.lines = temp_lineset.lines
+                self.vis.update_geometry(self.registered_ct_lineset)
+
+                # mapping from coarse deformed mesh to fine deformed mesh nodes for endoscopic view
+                fine_deformed_vertices = deform_fine_mesh_using_knn(self.registered_ct_mesh, deformed_mesh, self.registered_ct_mesh_2, self.knn_idxs, self.knn_weights, self.coarse_template_vertices, self.fine_template_vertices, self.adjacency_matrix)
+
+                # self.registered_ct_mesh_2.vertices = deformed_mesh.vertices
+                self.registered_ct_mesh_2.vertices = o3d.utility.Vector3dVector(fine_deformed_vertices)
+                self.registered_ct_mesh_2.compute_vertex_normals()
+                self.vis2.update_geometry(self.registered_ct_mesh_2)
+
+                self.ecg_latest = self.ecg_previous
                 
-            print("branch pass:", self.branch_pass)
+            # print("branch pass:", self.branch_pass)
             
 
             if(volumetric_three_d_points_far_lumen is not None):

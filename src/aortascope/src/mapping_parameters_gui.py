@@ -29,6 +29,7 @@ sim_device_pub           = rospy.Publisher('/sim_device', Bool, queue_size=1)
 shutdown_pub             = rospy.Publisher('/shutdown', Bool, queue_size=1)
 pullback_pub             = rospy.Publisher('/pullback', Int32, queue_size=1)
 replay_pub               = rospy.Publisher('/replay', Bool, queue_size=1)
+cardiac_pub              = rospy.Publisher('/cardiac', Bool, queue_size=1)
 
 
 # reg_status_sub           = rospy.Subscriber('/reg_status', Int32, reg_status_cb)
@@ -150,6 +151,26 @@ def call_register():
     call_registration_indirectly(dataset, visualize, refine, 0)
 
     registration_done_pub.publish(True)
+
+def call_motion_capture():
+
+    cardiac_pub.publish(True)
+
+    #complete this function
+    dataset = rospy.get_param('dataset', 0)
+    if(dataset ==0):
+        select_folder()
+    dataset = rospy.get_param('dataset', 0)
+
+    # visualize = checkbox_var.get()
+    visualize = 0
+
+    # start checking here?
+    start_parameter_check()
+
+    initialize_motion_capture_indirectly(dataset, visualize)
+
+
 
 
 def load_previous_registration():
@@ -338,20 +359,24 @@ try:
     # target_button = Button(root, text="Switch Target Vessel", font=button_font, width=button_width, height=button_height, command = switch_vessel)
     # target_button.grid(row=11, column=0, padx=padding_x, pady=padding_y)
 
-    refine_button = Button(root, text="Refine Abdominal Registration (Start)", font=button_font, width=button_width, height=button_height, command = call_refine)
-    refine_button.grid(row=11, column=0, padx=padding_x, pady=padding_y)
+    # refine_button = Button(root, text="Refine Abdominal Registration (Start)", font=button_font, width=button_width, height=button_height, command = call_refine)
+    # refine_button.grid(row=11, column=0, padx=padding_x, pady=padding_y)
 
-    refine_stop_button = Button(root, text="Refine Abdominal Registration (Stop)", font=button_font, width=button_width, height=button_height, command = save_refine)
-    refine_stop_button.grid(row=12, column=0, padx=padding_x, pady=padding_y)
+    # refine_stop_button = Button(root, text="Refine Abdominal Registration (Stop)", font=button_font, width=button_width, height=button_height, command = save_refine)
+    # refine_stop_button.grid(row=12, column=0, padx=padding_x, pady=padding_y)
 
     # quit_button = Button(root, text="Quit Application", font=button_font, width=button_width, height=button_height, command = quit_aortascope)
     # quit_button.grid(row=13, column=0, padx=padding_x, pady=padding_y)
 
+    
+    sim_device = Button(root, text="Initialize Cardiac Motion", font=button_font, width=button_width, height=button_height, command = call_motion_capture)
+    sim_device.grid(row=11, column=0, padx=padding_x, pady=padding_y)
+
+    sim_device = Button(root, text="Load IVUS Mesh Only", font=button_font, width=button_width, height=button_height, command = load_previous_surface_geometry)
+    sim_device.grid(row=12, column=0, padx=padding_x, pady=padding_y)
+
     sim_device = Button(root, text="Simulate Device Deployment", font=button_font, width=button_width, height=button_height, command = sim_device_deployment)
     sim_device.grid(row=13, column=0, padx=padding_x, pady=padding_y)
-
-    # sim_device = Button(root, text="Load IVUS Mesh Only", font=button_font, width=button_width, height=button_height, command = load_previous_surface_geometry)
-    # sim_device.grid(row=13, column=0, padx=padding_x, pady=padding_y)
 
 
     # PROGRESS BAR AND PERCENTAGE
