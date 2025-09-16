@@ -37,36 +37,67 @@ class GatingVisualizer:
         # Store the latest value from the message
         self.latest_signal_value = msg.data
 
+    # def update_visualization(self, event):
+    #     # Draw a white line for 1 and a black line for 0 based on the latest signal value
+    #     # delta = self.latest_signal_value - self.previous_value
+    #     # self.previous_value = self.latest_signal_value
+    #     threshold = 620
+    #     # if(self.latest_signal_value < threshold):
+    #     #     print(self.latest_signal_value)
+    #     color = (255, 255, 255) if self.latest_signal_value < threshold else (0, 0, 0)
+
+    #     # Shift the image left to make space for the new signal
+    #     self.signal_image[:, :-1] = self.signal_image[:, 1:]
+
+    #     # Update the last column with the new signal value
+    #     self.signal_image[:, -1] = color
+        
+
+    #     resized_image = cv2.resize(self.signal_image, (self.signal_length * 10, self.signal_height * 4))
+
+
+    #     # Update the graph
+    #     self.graph_image[:, :-1] = self.graph_image[:, 1:]  # Shift left to create scrolling effect
+    #     normalized_value = int(
+    #         (self.latest_signal_value - self.y_min) / (self.y_max - self.y_min) * (self.signal_height - 1)
+    #     )
+    #     normalized_value = np.clip(normalized_value, 0, self.signal_height - 1)
+    #     self.graph_image[:, -1] = (0, 0, 0)  # Set background for the new column
+    #     self.graph_image[self.signal_height - 1 - normalized_value, -1] = (0, 255, 0)  # Plot signal as green point
+
+    #     # Display the image
+    #     cv2.imshow("ECG Signal", resized_image)
+    #     # cv2.imshow("Signal Graph", cv2.resize(self.graph_image, (self.signal_length * 10, self.signal_height * 3)))
+    #     cv2.waitKey(1)
+
     def update_visualization(self, event):
-        # Draw a white line for 1 and a black line for 0 based on the latest signal value
-        # delta = self.latest_signal_value - self.previous_value
-        # self.previous_value = self.latest_signal_value
         threshold = 620
-        # if(self.latest_signal_value < threshold):
-        #     print(self.latest_signal_value)
-        color = (255, 255, 255) if self.latest_signal_value < threshold else (0, 0, 0)
 
         # Shift the image left to make space for the new signal
         self.signal_image[:, :-1] = self.signal_image[:, 1:]
 
-        # Update the last column with the new signal value
-        self.signal_image[:, -1] = color
-
-        resized_image = cv2.resize(self.signal_image, (self.signal_length * 10, self.signal_height * 4))
-
-
-        # Update the graph
-        self.graph_image[:, :-1] = self.graph_image[:, 1:]  # Shift left to create scrolling effect
+        # Normalize signal to fit the signal height
         normalized_value = int(
             (self.latest_signal_value - self.y_min) / (self.y_max - self.y_min) * (self.signal_height - 1)
         )
         normalized_value = np.clip(normalized_value, 0, self.signal_height - 1)
-        self.graph_image[:, -1] = (0, 0, 0)  # Set background for the new column
-        self.graph_image[self.signal_height - 1 - normalized_value, -1] = (0, 255, 0)  # Plot signal as green point
 
-        # Display the image
+        # Clear the last column
+        self.signal_image[:, -1] = (0, 0, 0)
+
+        # Fill up to normalized height with white
+        self.signal_image[self.signal_height - 1 - normalized_value :, -1] = (255, 255, 255)
+
+        # Resize for display
+        resized_image = cv2.resize(self.signal_image, (self.signal_length * 10, self.signal_height * 4))
+
+        # Update scrolling graph as before
+        self.graph_image[:, :-1] = self.graph_image[:, 1:]
+        self.graph_image[:, -1] = (0, 0, 0)
+        self.graph_image[self.signal_height - 1 - normalized_value, -1] = (0, 255, 0)
+
+        # Display
         cv2.imshow("ECG Signal", resized_image)
-        # cv2.imshow("Signal Graph", cv2.resize(self.graph_image, (self.signal_length * 10, self.signal_height * 3)))
         cv2.waitKey(1)
 
     def run(self):
