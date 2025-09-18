@@ -329,6 +329,23 @@ class PointCloudUpdater:
         self.ecg_buffer = deque(maxlen=self.buffer_size)
         self.orifice_angles = deque(maxlen=5)
 
+
+        # will be placed in initialization
+        self.mask_2A_buffer = deque(maxlen=self.buffer_size)
+        self.branch_pass = 0
+        # elements in mask_2A_buffer will be [branch_id, component_mask, orifice_angle]
+        # intialize branch id to 0 for mask 2A buffer e.g., [0, np.zeros_like(mask_2), np.nan]
+
+        self.branch_pass = self.branch_pass + 1 
+        self.mask_2B_buffer = deque(maxlen=self.buffer_size)
+        # initialize branch id to 1 for mask 2B buffer in a similar way
+
+        self.mask_2_buffers = deque(maxlen=2)
+        self.mask_2_buffers.append(self.mask_2A_buffer)
+        self.mask_2_buffers.append(self.mask_2B_buffer)
+
+
+
         self.transformed_centroids=[]
 
         self.processed_centreline = o3d.geometry.PointCloud()
@@ -2679,7 +2696,7 @@ class PointCloudUpdater:
                 pred, conf_class2= deeplumen_segmentation(image,self.model)
                 # pred, conf_class2, conf_colormap, overlay = deeplumen_segmentation(image, self.model)
                 raw_data = pred[0].numpy()
-                mask_1, mask_2 = post_process_deeplumen(raw_data, conf_class2, self.conf_threshold)
+                mask_1, mask_2, largest_two_masks = post_process_deeplumen(raw_data, conf_class2, self.conf_threshold)
 
                 
 
@@ -2796,123 +2813,438 @@ class PointCloudUpdater:
             # self.mask_1_buffer.append(mask_1)
             # self.mask_2_buffer.append(mask_2)
 
-            branch_pixels = np.count_nonzero(mask_2)
 
 
-            if(self.previous_mask is None): 
-                self.previous_mask = np.zeros_like(mask_2,dtype=np.uint8)
+            # OLD CODE
+            # branch_pixels = np.count_nonzero(mask_2) #needs to be tracked separately for components
+
+
+            # if(self.previous_mask is None): 
+            #     self.previous_mask = np.zeros_like(mask_2,dtype=np.uint8)
+
+            # # every point for orifice detection
+            # mask_1_contour_every_point,hier = cv2.findContours(mask_1, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+
+            
+
+            # if(self.orifice_center_map == 1 and np.any(mask_2 > 0)):
+
+
+            #     # ------ FIND ORIFICE PIXELS ------- #
+                
+            #     # ensure that masks are well separated
+            #     kernel = np.ones((self.minimum_thickness, self.minimum_thickness), np.uint8)  # You can adjust the kernel size for the dilation effect
+            #     dilated_mask_1 = cv2.dilate(mask_1, kernel, iterations=1)
+
+            #     # Find the overlap between the dilated mask
+            #     touching_pixels = cv2.bitwise_and(dilated_mask_1, mask_2)
+
+            #     # # for all non zero pixels in the mask "touching_pixels", find the nearest points on mask_1_contour
+            #     non_zero_pixels = np.column_stack(np.where(touching_pixels > 0))  # Shape (M, 2)
+
+            #     # Step 3: Compute nearest contour point for each non-zero pixel
+            #     # This creates a matrix of distances between each pixel in `non_zero_pixels` and `contour_points`
+
+            #     contour_points = np.vstack(mask_1_contour_every_point).squeeze()
+
+
+            #     non_zero_pixels_xy = non_zero_pixels[:, [1, 0]]
+            #     distances = cdist(non_zero_pixels_xy, contour_points, metric='euclidean')
+
+            #     # # For each non-zero pixel, find the index of the nearest contour point
+            #     nearest_indices = distances.argmin(axis=1)  # Shape (M,)
+            
+            #     # is mask 2 on mask 1 boundary or not? (we already know that from post processing)
+            #     if nearest_indices.size > 0:
+
+            #         # if so, find the ORIFICE CENTER
+            #         start_raycast = time.time()
+
+            #         contiguous_indices, contiguous_block_points = get_contiguous_block_from_contour(contour_points, nearest_indices)
+
+            #         orifice_mask = mask_2
+
+            #         contour_points = np.asarray(contiguous_block_points)
+                    
+            #         normals = visualize_contour_normals(orifice_mask, contour_points)
+                
+            #         raycast_hits, ray_lengths = compute_branch_raycast_hits(mask_2, contour_points, normals)
+
+            #         end_raycast = time.time()
+            #         diff_raycast = end_raycast - start_raycast
+
+            #         print("raycasting operations time:", end_raycast)
+
+            #         mid_index = len(raycast_hits) // 2
+
+                
+            #         orifice_center_three_d_points = get_single_point_cloud_from_pixels([contiguous_block_points[mid_index]],scaling)
+                    
+
+            #         # DETERMINE IF OVERLAP EXISTS
+
+            #         # number of buffer images to compare to
+            #         n = 10
+                    
+            #         if self.mask_2_buffer:
+                    
+            #             # combine all the masks in the buffer for comparison to recent mask
+            #             combined_previous_mask = np.logical_or.reduce(list(self.mask_2_buffer)[-n-1:-1])
+            #             combined_previous_mask = (combined_previous_mask * 255).astype(np.uint8)
+            #             overlap = np.logical_and(combined_previous_mask == 255, mask_2 == 255)
+
+            #         else:
+            #             overlap = np.logical_and(self.previous_mask == 255, mask_2 == 255)
+                        
+
+            #         num_overlap_pixels = np.sum(overlap)
+            #         threshold = 10
+
+            #         # only calculated if blue mask is close to the border of red
+            #         orifice_two_d = np.asarray(contiguous_block_points[mid_index]).squeeze()
+
+                    
+            #         if(np.shape(self.orifice_angles)[0] >=5):
+            #             average_orifice_angle = np.mean(self.orifice_angles, axis=0)
+            #         else:
+            #             average_orifice_angle = orifice_two_d 
+
+            #         angle_threshold =25
+
+
+            #         self.orifice_angles.append(orifice_two_d)
+
+            #         # check if sufficient overlap and angle between orifices is in right place
+            #         if(num_overlap_pixels > threshold and np.linalg.norm((orifice_two_d-average_orifice_angle),axis=0) < angle_threshold):
+            #             # close enough, same branch
+            #             pass
+                        
+            #         else:
+            #             # not the same go to the next branch
+            #             self.branch_pass = self.branch_pass + 1
+                
+            #     else:
+            #         orifice_three_d_points = None
+            #         orifice_center_three_d_points = None
+
+
+
+            
+
+
+
+
+            # final_component_data = []
+            # # every point for orifice detection
+            # mask_1_contour_every_point,hier = cv2.findContours(mask_1, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+            # indices_added = []
+            
+
+            # buffers_touched = set()
+            
+        
+            # for component_mask in largest_two_masks:
+
+       
+            #     # calculate orifice pixel, orifice angle, orifice center three d points, far vpc for each component (usual runthrough)
+            #     if(self.orifice_center_map == 1 and np.any(component_mask > 0)):
+
+
+            #         # ------ FIND ORIFICE PIXELS ------- #
+                    
+            #         kernel = np.ones((self.minimum_thickness, self.minimum_thickness), np.uint8)  # You can adjust the kernel size for the dilation effect
+            #         dilated_mask_1 = cv2.dilate(mask_1, kernel, iterations=1)
+            #         touching_pixels = cv2.bitwise_and(dilated_mask_1, component_mask)
+            #         non_zero_pixels = np.column_stack(np.where(touching_pixels > 0))  # Shape (M, 2)
+            #         contour_points = np.vstack(mask_1_contour_every_point).squeeze()
+            #         non_zero_pixels_xy = non_zero_pixels[:, [1, 0]]
+            #         distances = cdist(non_zero_pixels_xy, contour_points, metric='euclidean')
+            #         nearest_indices = distances.argmin(axis=1)  # Shape (M,)
+                
+            #         # is mask 2 on mask 1 boundary or not? (we already know that from post processing)
+            #         if nearest_indices.size > 0:
+
+            #             # if so, find the ORIFICE CENTER
+
+            #             contiguous_indices, contiguous_block_points = get_contiguous_block_from_contour(contour_points, nearest_indices)
+            #             orifice_mask = component_mask
+            #             contour_points = np.asarray(contiguous_block_points)
+            #             normals = visualize_contour_normals(orifice_mask, contour_points)
+            #             raycast_hits, ray_lengths = compute_branch_raycast_hits(component_mask, contour_points, normals)
+            #             mid_index = len(raycast_hits) // 2
+            #             orifice_center_three_d_points = get_single_point_cloud_from_pixels([contiguous_block_points[mid_index]],scaling)
+                        
+
+            #             # DETERMINE IF OVERLAP EXISTS WITH BUFFERS
+            #             # number of buffer images to compare to
+            #             n = 10
+                        
+            #             num_overlaps = []
+            #             average_orifice_angles = []
+            #             orifice_two_d = np.asarray(contiguous_block_points[mid_index]).squeeze()
+
+            #             for mask_2_buffer in self.mask_2_buffers:
+      
+                          
+                            
+            #                 # combine all the masks in the buffer for comparison to recent mask
+            #                 combined_previous_mask = np.logical_or.reduce(list(mask_2_buffer)[-n-1:-1, 1]) # haven't appended most recent yet, which is good! column 1 is the masks
+            #                 combined_previous_mask = (combined_previous_mask * 255).astype(np.uint8)
+            #                 overlap = np.logical_and(combined_previous_mask == 255, component_mask == 255)
+
+
+                    
+                                
+            #                 num_overlap_pixels = np.sum(overlap)
+            #                 num_overlaps.append(num_overlap_pixels)
+                            
+
+                            
+            #                 average_orifice_angle = np.nanmean(list(mask_2_buffer)[-n-1:-1, 3], axis=0)
+            #                 average_orifice_angles.append(average_orifice_angle)
+                            
+
+            #             angle_threshold =25
+            #             threshold = 10
+
+            #             average_orifice_angles = np.asarray(average_orifice_angles)
+
+
+            #             # check if any overlap exists with 2 buffers based on orifice angles and overlapping pixels
+            #             if(num_overlaps[0] > threshold and np.linalg.norm((orifice_two_d-average_orifice_angles[0,:]),axis=0) < angle_threshold):
+            #                 overlap_1 = num_overlaps[0]
+                            
+
+            #             if(num_overlaps[1]> threshold and np.linalg.norm((orifice_two_d-average_orifice_angles[1,:]),axis=0) < angle_threshold):
+            #                 overlap_2 = num_overlaps[1]
+                            
+            #             # determine which branch id component overlaps with more based on num overlapping pixels
+            #             if(overlap_1 is not None and overlap_2 is not None):
+            #                 if(overlap_1>overlap_2):
+            #                     # fetch buffer 1 branch id
+            #                     #DEBATABLE
+            #                     branch_pass_id = self.mask_2_buffers[0][0]
+            #                     relevant_buffer = 0
+
+            #                 else:
+            #                     # fetch buffer 2 branch id
+            #                     branch_pass_id = self.mask_2_buffers[1][0]
+            #                     relevant_buffer = 1
+
+            #             elif(overlap_1 is not None):
+            #                 # fetch buffer 1 branch id
+            #                 branch_pass_id = self.mask_2_buffers[0][0]
+            #                 relevant_buffer = 0
+
+            #             elif(overlap_2 is not None):
+            #                 # fetch buffer 2 branch id 
+            #                 branch_pass_id = self.mask_2_buffers[1][0]
+            #                 relevant_buffer = 1
+
+            #             else:
+            #                 self.branch_pass = self.branch_pass + 1
+            #                 branch_pass_id = self.branch_pass
+
+            #                 # push back BUFFER - get rid of oldest buffer
+            #                 new_mask_2_buffer = deque(maxlen=self.buffer_size)
+            #                 self.mask_2_buffers.append(new_mask_2_buffer)
+                            
+            #                 relevant_buffer = len(self.mask_2_buffers) - 1 # the newest / most recent!
+            #                 # buffers_touched.add(relevant_buffer)
+
+                        
+            #             # for immediate appending to point clouds
+            #             volumetric_three_d_points_far_lumen = get_single_point_cloud_from_mask(component_mask, scaling) # this will get overwritten later
+            #             branch_pixels = np.count_nonzero(component_mask) #needs to be tracked separately for components
+            #             final_component_data.append([branch_pass_id, orifice_center_three_d_points,volumetric_three_d_points_far_lumen,branch_pixels])
+                        
+
+            #             # DEBATABLE
+            #             # append component mask, orifice angle (both needed for computation next round), and its branch id to the relevant buffer (whichever the mask was closest to if any)
+            #             self.mask_2_buffers[relevant_buffer].append([branch_pass_id,component_mask,orifice_two_d])
+            #             buffers_touched.add(relevant_buffer)
+                        
+        
+            #         else:
+            #             # fine, just wont do anything
+            #             orifice_three_d_points = None
+            #             orifice_center_three_d_points = None
+            #             volumetric_three_d_points_far_lumen = None
+            #             branch_pixels = 0
+            #             branch_pass_id = None
+            #             final_component_data.append([branch_pass_id, orifice_center_three_d_points, volumetric_three_d_points_far_lumen, branch_pixels])
+                        
+                        
+
+
+            # # add an empty mask to the buffer if nothing was added to both of most recent masks this iteration
+            # # check size before and size after
+            # untouched = {0, 1} - buffers_touched
+            # empty_mask =  np.zeros_like(mask_2,dtype=np.uint8)
+            # for idx in untouched:
+            #     print("idx", idx)
+            #     self.mask_2_buffers[idx].append([self.mask_2_buffers[idx][-1][0], empty_mask, np.nan])
+           
+
+            final_component_data = []
 
             # every point for orifice detection
-            mask_1_contour_every_point,hier = cv2.findContours(mask_1, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+            mask_1_contour_every_point, hier = cv2.findContours(
+                mask_1, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
+            )
 
-            
-            if(branch_visible = np.any(mask_2 > 0)):
-            if(self.orifice_center_map == 1 ):
+            buffers_touched = set()  # track which buffers got an append this frame
 
+            for component_mask in largest_two_masks:
 
-                # ------ FIND ORIFICE PIXELS ------- #
-                
-                # ensure that masks are well separated
-                kernel = np.ones((self.minimum_thickness, self.minimum_thickness), np.uint8)  # You can adjust the kernel size for the dilation effect
-                dilated_mask_1 = cv2.dilate(mask_1, kernel, iterations=1)
+                if self.orifice_center_map == 1 and np.any(component_mask > 0):
 
-                # Find the overlap between the dilated mask
-                touching_pixels = cv2.bitwise_and(dilated_mask_1, mask_2)
+                    # ------ FIND ORIFICE PIXELS ------- #
+                    kernel = np.ones((self.minimum_thickness, self.minimum_thickness), np.uint8)
+                    dilated_mask_1 = cv2.dilate(mask_1, kernel, iterations=1)
+                    touching_pixels = cv2.bitwise_and(dilated_mask_1, component_mask)
+                    non_zero_pixels = np.column_stack(np.where(touching_pixels > 0))
 
-                # # for all non zero pixels in the mask "touching_pixels", find the nearest points on mask_1_contour
-                non_zero_pixels = np.column_stack(np.where(touching_pixels > 0))  # Shape (M, 2)
+                    contour_points = np.vstack(mask_1_contour_every_point).squeeze()
+                    non_zero_pixels_xy = non_zero_pixels[:, [1, 0]]
+                    distances = cdist(non_zero_pixels_xy, contour_points, metric="euclidean")
+                    nearest_indices = distances.argmin(axis=1)
 
-                # Step 3: Compute nearest contour point for each non-zero pixel
-                # This creates a matrix of distances between each pixel in `non_zero_pixels` and `contour_points`
+                    if nearest_indices.size > 0:
+                        # -------- Find orifice center --------
+                        contiguous_indices, contiguous_block_points = get_contiguous_block_from_contour(
+                            contour_points, nearest_indices
+                        )
+                        orifice_mask = component_mask
+                        contour_points = np.asarray(contiguous_block_points)
+                        normals = visualize_contour_normals(orifice_mask, contour_points)
+                        raycast_hits, ray_lengths = compute_branch_raycast_hits(
+                            component_mask, contour_points, normals
+                        )
+                        mid_index = len(raycast_hits) // 2
+                        orifice_center_three_d_points = get_single_point_cloud_from_pixels(
+                            [contiguous_block_points[mid_index]], scaling
+                        )
 
-                contour_points = np.vstack(mask_1_contour_every_point).squeeze()
-                non_zero_pixels_xy = non_zero_pixels[:, [1, 0]]
-                distances = cdist(non_zero_pixels_xy, contour_points, metric='euclidean')
+                        # -------- Check overlap with buffers --------
+                        n = 10
+                        num_overlaps, average_orifice_angles = [], []
+                        orifice_two_d = np.asarray(contiguous_block_points[mid_index]).squeeze()
 
-                # For each non-zero pixel, find the index of the nearest contour point
-                nearest_indices = distances.argmin(axis=1)  # Shape (M,)
-            
+                        for mask_2_buffer in self.mask_2_buffers:
+                            if len(mask_2_buffer) > 0:
+                                combined_previous_mask = np.logical_or.reduce(
+                                    [entry[1] for entry in list(mask_2_buffer)[-n - 1 : -1]]
+                                )
+                                combined_previous_mask = (combined_previous_mask * 255).astype(np.uint8)
+                                overlap = np.logical_and(
+                                    combined_previous_mask == 255, component_mask == 255
+                                )
+                                num_overlap_pixels = np.sum(overlap)
+                                num_overlaps.append(num_overlap_pixels)
 
-                if nearest_indices.size > 0:
+                                angles = []
+                                for entry in list(mask_2_buffer)[-n - 1 : -1]:
+                                    angle = np.array(entry[2], dtype=float).reshape(-1)
+                                    if angle.size == 2:
+                                        angles.append(angle)
+                                    else:
+                                        angles.append([np.nan, np.nan])
+                                if angles:
+                                    avg_angle = np.nanmean(np.vstack(angles), axis=0)
+                                else:
+                                    avg_angle = np.array([np.nan, np.nan])
+                                average_orifice_angles.append(avg_angle)
+                            else:
+                                num_overlaps.append(0)
+                                average_orifice_angles.append(np.array([np.nan, np.nan]))
 
-                    start_raycast = time.time()
+                        angle_threshold = 25
+                        threshold = 10
+                        overlap_1, overlap_2 = None, None
 
-                    contiguous_indices, contiguous_block_points = get_contiguous_block_from_contour(contour_points, nearest_indices)
+                        if (
+                            num_overlaps[0] > threshold
+                            and np.linalg.norm(orifice_two_d - average_orifice_angles[0]) < angle_threshold
+                        ):
+                            overlap_1 = num_overlaps[0]
 
-                    orifice_mask = mask_2
+                        if (
+                            num_overlaps[1] > threshold
+                            and np.linalg.norm(orifice_two_d - average_orifice_angles[1]) < angle_threshold
+                        ):
+                            overlap_2 = num_overlaps[1]
 
-                    contour_points = np.asarray(contiguous_block_points)
-                    
-                    normals = visualize_contour_normals(orifice_mask, contour_points)
-                
-                    raycast_hits, ray_lengths = compute_branch_raycast_hits(mask_2, contour_points, normals)
+                        # -------- Decide buffer assignment --------
+                        branch_pass_id, relevant_buffer = None, None
 
-                    end_raycast = time.time()
-                    diff_raycast = end_raycast - start_raycast
+                        if overlap_1 is not None and overlap_2 is not None:
+                            if overlap_1 > overlap_2:
+                                branch_pass_id = (
+                                    self.mask_2_buffers[0][-1][0] if len(self.mask_2_buffers[0]) > 0 else None
+                                )
+                                relevant_buffer = 0
+                            else:
+                                branch_pass_id = (
+                                    self.mask_2_buffers[1][-1][0] if len(self.mask_2_buffers[1]) > 0 else None
+                                )
+                                relevant_buffer = 1
 
-                    print("raycasting operations time:", end_raycast)
+                        elif overlap_1 is not None:
+                            branch_pass_id = (
+                                self.mask_2_buffers[0][-1][0] if len(self.mask_2_buffers[0]) > 0 else None
+                            )
+                            relevant_buffer = 0
 
-                    mid_index = len(raycast_hits) // 2
+                        elif overlap_2 is not None:
+                            branch_pass_id = (
+                                self.mask_2_buffers[1][-1][0] if len(self.mask_2_buffers[1]) > 0 else None
+                            )
+                            relevant_buffer = 1
 
-                    # check if orifice center detection is correct
-                    # rgb_image = cv2.cvtColor(grayscale_image, cv2.COLOR_GRAY2BGR)
-                    # cv2.circle(rgb_image, contiguous_block_points[mid_index], radius=5, color=(0, 0, 255), thickness=-1) 
-                    # cv2.imshow("rgb_image", rgb_image)
-                    # cv2.waitKey(0)
-                    
+                        else:
+                            # new branch
+                            self.branch_pass += 1
+                            branch_pass_id = self.branch_pass
 
-                    orifice_center_three_d_points = get_single_point_cloud_from_pixels([contiguous_block_points[mid_index]],scaling)
-                    
+                            new_mask_2_buffer = deque(maxlen=self.buffer_size)
+                            self.mask_2_buffers.append(new_mask_2_buffer)
+                            relevant_buffer = len(self.mask_2_buffers) - 1
 
-                
+                        # -------- Append real data --------
+                        volumetric_three_d_points_far_lumen = get_single_point_cloud_from_mask(
+                            component_mask, scaling
+                        )
+                        branch_pixels = np.count_nonzero(component_mask)
+                        final_component_data.append(
+                            [branch_pass_id, orifice_center_three_d_points, volumetric_three_d_points_far_lumen, branch_pixels]
+                        )
+
+                        self.mask_2_buffers[relevant_buffer].append(
+                            [branch_pass_id, component_mask, orifice_two_d]
+                        )
+                        buffers_touched.add(relevant_buffer)
+
+                    else:
+                        # no nearest indices — append empty data
+                        final_component_data.append([None, None, None, 0])
+
+            # -------- Ensure untouched buffers get an empty mask --------
+            untouched = {0, 1} - buffers_touched
+            empty_mask = np.zeros_like(mask_2, dtype=np.uint8)
+
+            for idx in untouched:
+                if len(self.mask_2_buffers[idx]) > 0:
+                    last_branch_id = self.mask_2_buffers[idx][-1][0]
                 else:
-                    orifice_three_d_points = None
-                    orifice_center_three_d_points = None
+                    self.branch_pass += 1
+                    last_branch_id = self.branch_pass
 
-                # ----- DETEMINE IF OVERLAP EXISTS ------ #
-
-                
-
-                # if a branch is visible and branch mask borders red mask
-                if(branch_visible and nearest_indices.size > 0):
-                    
-                    # number of buffer images to compare to
-                    n = 10
-                    
-                    if self.mask_2_buffer:
-                    
-                        combined_previous_mask = np.logical_or.reduce(list(self.mask_2_buffer)[-n-1:-1])
-                        combined_previous_mask = (combined_previous_mask * 255).astype(np.uint8)
-                        overlap = np.logical_and(combined_previous_mask == 255, mask_2 == 255)
-
-                    else:
-                        overlap = np.logical_and(self.previous_mask == 255, mask_2 == 255)
-                        
-
-                    num_overlap_pixels = np.sum(overlap)
-                    threshold = 10
-
-                    # only calculated if blue mask is close to the border of red
-                    orifice_two_d = np.asarray(contiguous_block_points[mid_index]).squeeze()
-
-                    
-                    if(np.shape(self.orifice_angles)[0] >=5):
-                        average_orifice_angle = np.mean(self.orifice_angles, axis=0)
-                    else:
-                        average_orifice_angle = orifice_two_d 
-
-                    angle_threshold =25
+                self.mask_2_buffers[idx].append([last_branch_id, empty_mask, np.nan])
 
 
-                    self.orifice_angles.append(orifice_two_d)
 
-                    if(num_overlap_pixels > threshold and np.linalg.norm((orifice_two_d-average_orifice_angle),axis=0) < angle_threshold):
-                        pass
-                        
-                    else:
-                        self.branch_pass = self.branch_pass + 1
-            
-            
+
 
             # ---- PUBLISH IMAGE ----- #
 
@@ -3013,6 +3345,8 @@ class PointCloudUpdater:
         if self.vpC_map == 1:
             volumetric_three_d_points_near_lumen = get_single_point_cloud_from_mask(mask_1, scaling)
             volumetric_three_d_points_far_lumen = get_single_point_cloud_from_mask(mask_2, scaling) 
+
+            
 
         if self.bpC_map == 1:
             #for evaluation of surface accuracy at the end
@@ -3341,53 +3675,65 @@ class PointCloudUpdater:
             # print("branch pass:", self.branch_pass)
             
 
-            if(volumetric_three_d_points_far_lumen is not None):
-                far_vpC_points=o3d.geometry.PointCloud()
-                far_vpC_points.points=o3d.utility.Vector3dVector(volumetric_three_d_points_far_lumen)
+            # run this for each component -> volumetric threed points, branch pass, number of branch pixels
+            for final_component in final_component_data:
 
-                #downsample volumetric point cloud
-                far_vpC_points = far_vpC_points.voxel_down_sample(voxel_size=0.0005)
-                far_vpC_points.transform(TW_EM @ TEM_C)
+                branch_pass = final_component[0]
+                # orifice_center_three_d_points = final_component[1]
+                volumetric_three_d_points_far_lumen = final_component[2]
+                branch_pixels = final_component[3]
 
-
-                # for results evaluation
-                max_branch_pass = 255  # Set based on your application needs
-                normalized_pass = self.branch_pass / max_branch_pass  # Scale to [0, 1]
-                max_branch_pixels = 2000.0
-                normalized_branch_pixels = branch_pixels / max_branch_pixels
-                duplicated_pass_colors = np.repeat([[normalized_pass, normalized_branch_pixels, 0]], len(far_vpC_points.points), axis=0)
-
- 
-                far_vpC_points.colors = o3d.utility.Vector3dVector(duplicated_pass_colors)
-
-
-                # if(self.extend == 1 and self.dissection_mapping == 1):
-                # # if(self.extend == 1):
-                # #     # prevent memory issues by commenting this out
-                #     self.volumetric_far_point_cloud.points.extend(far_vpC_points.points)
-                #     self.volumetric_far_point_cloud.colors.extend(far_vpC_points.colors)
-                # else:
-                #     self.volumetric_far_point_cloud.points = far_vpC_points.points
-                #     self.volumetric_far_point_cloud.colors = far_vpC_points.colors
-
+                if(volumetric_three_d_points_far_lumen is not None):
+        
+                    
                 
+                    far_vpC_points=o3d.geometry.PointCloud()
+                    far_vpC_points.points=o3d.utility.Vector3dVector(volumetric_three_d_points_far_lumen)
 
-                if(self.extend == 1):
+                    #downsample volumetric point cloud
+                    far_vpC_points = far_vpC_points.voxel_down_sample(voxel_size=0.0005)
+                    far_vpC_points.transform(TW_EM @ TEM_C)
+
+
+                    # for results evaluation
+                    max_branch_pass = 255  # Set based on your application needs
+                    # normalized_pass = self.branch_pass / max_branch_pass  # Scale to [0, 1]
+                    normalized_pass = branch_pass / max_branch_pass  # Scale to [0, 1]
+                    max_branch_pixels = 2000.0
+                    normalized_branch_pixels = branch_pixels / max_branch_pixels
+                    duplicated_pass_colors = np.repeat([[normalized_pass, normalized_branch_pixels, 0]], len(far_vpC_points.points), axis=0)
+
+    
+                    far_vpC_points.colors = o3d.utility.Vector3dVector(duplicated_pass_colors)
+
+
+                    # if(self.extend == 1 and self.dissection_mapping == 1):
+                    # # if(self.extend == 1):
+                    # #     # prevent memory issues by commenting this out
+                    #     self.volumetric_far_point_cloud.points.extend(far_vpC_points.points)
+                    #     self.volumetric_far_point_cloud.colors.extend(far_vpC_points.colors)
+                    # else:
+                    #     self.volumetric_far_point_cloud.points = far_vpC_points.points
+                    #     self.volumetric_far_point_cloud.colors = far_vpC_points.colors
 
                     
 
-                    self.volumetric_far_point_cloud.points.extend(far_vpC_points.points)
-                    self.volumetric_far_point_cloud.colors.extend(far_vpC_points.colors)
+                    if(self.extend == 1):
 
-                else:
-                    self.volumetric_far_point_cloud.points = far_vpC_points.points
-                    self.volumetric_far_point_cloud.colors = far_vpC_points.colors
+                        
 
-                    
+                        self.volumetric_far_point_cloud.points.extend(far_vpC_points.points)
+                        self.volumetric_far_point_cloud.colors.extend(far_vpC_points.colors)
+
+                    else:
+                        self.volumetric_far_point_cloud.points = far_vpC_points.points
+                        self.volumetric_far_point_cloud.colors = far_vpC_points.colors
+
+                        
 
 
-                # OVERRIDE BRANCH PASS COLOURING - this is needed for clustering later
-                # self.volumetric_far_point_cloud.paint_uniform_color([0,0,1])
+                    # OVERRIDE BRANCH PASS COLOURING - this is needed for clustering later
+                    # self.volumetric_far_point_cloud.paint_uniform_color([0,0,1])
 
 
             # self.vis.update_geometry(self.point_cloud)
@@ -3577,58 +3923,68 @@ class PointCloudUpdater:
         # ---- APPEND TO ORIFICE CENTER PC ------ #
         if(self.orifice_center_map == 1 and (self.deeplumen_on ==1 or self.deeplumen_lstm_on==1 or self.deeplumen_slim_on)):
 
-            if(orifice_center_three_d_points is not None):           
-                
-                print("current branch pass", self.branch_pass)
                 
 
-                max_branch_pass = 255  # Set based on your application needs
-                normalized_pass = self.branch_pass / max_branch_pass  # Scale to [0, 1]
-
+            # run this for each component in current image -> orifice_center_three_d_points, branch pass 
+            for final_component in final_component_data:
         
-                max_branch_pixels = 2000.0
-                normalized_branch_pixels = branch_pixels / max_branch_pixels
-
-
-                # Create duplicated colors
-                duplicated_pass_colors = [[normalized_pass, normalized_branch_pixels, 0]]
-
-          
-        
-                orifice_center_points = o3d.geometry.PointCloud()
-                orifice_center_points.points = o3d.utility.Vector3dVector(orifice_center_three_d_points)
-                orifice_center_points.transform(TW_EM @ TEM_C)
-              
-                orifice_center_points.colors = o3d.utility.Vector3dVector(duplicated_pass_colors)
-
+                branch_pass = final_component[0]
+                orifice_center_three_d_points = final_component[1]
+                volumetric_three_d_points_far_lumen = final_component[2]
+                branch_pixels = final_component[3]   
                 
-
+                if(orifice_center_three_d_points is not None):
                 
-                
+                    print("current branch pass", self.branch_pass)
+                    
 
-                if(self.extend==1):
-                   
-                   
-                    self.orifice_center_point_cloud.points.extend(orifice_center_points.points)
-                    self.orifice_center_point_cloud.colors.extend(orifice_center_points.colors)
+                    max_branch_pass = 255  # Set based on your application needs
+                    normalized_pass = self.branch_pass / max_branch_pass  # Scale to [0, 1]
+
+            
+                    max_branch_pixels = 2000.0
+                    normalized_branch_pixels = branch_pixels / max_branch_pixels
+
+
+                    # Create duplicated colors
+                    duplicated_pass_colors = [[normalized_pass, normalized_branch_pixels, 0]]
+
+            
+            
+                    orifice_center_points = o3d.geometry.PointCloud()
+                    orifice_center_points.points = o3d.utility.Vector3dVector(orifice_center_three_d_points)
+                    orifice_center_points.transform(TW_EM @ TEM_C)
+                
+                    orifice_center_points.colors = o3d.utility.Vector3dVector(duplicated_pass_colors)
 
                     
-                    orifice_center_spheres_temp = get_sphere_cloud(np.asarray(self.orifice_center_point_cloud.points), 0.0025, 12, [0,0,1])
-                    self.orifice_center_spheres.vertices = orifice_center_spheres_temp.vertices
-                    self.orifice_center_spheres.triangles = orifice_center_spheres_temp.triangles
-                    self.orifice_center_spheres.compute_vertex_normals()
-                    self.orifice_center_spheres.paint_uniform_color([0,0,1])
-                
-                   
-                else:
-                    self.orifice_center_point_cloud.points = orifice_center_points.points
-                    self.orifice_center_point_cloud.colors = orifice_center_points.colors
 
-                    orifice_center_spheres_temp = get_sphere_cloud(np.asarray(orifice_center_points.points), 0.0025, 12, [0,0,1])
-                    self.orifice_center_spheres.vertices = orifice_center_spheres_temp.vertices
-                    self.orifice_center_spheres.triangles = orifice_center_spheres_temp.triangles
-                    self.orifice_center_spheres.compute_vertex_normals()
-                    # print("just one sphere", np.asarray(self.orifice_center_spheres.vertices))
+                    
+                    
+
+                    if(self.extend==1):
+                    
+                    
+                        self.orifice_center_point_cloud.points.extend(orifice_center_points.points)
+                        self.orifice_center_point_cloud.colors.extend(orifice_center_points.colors)
+
+                        
+                        orifice_center_spheres_temp = get_sphere_cloud(np.asarray(self.orifice_center_point_cloud.points), 0.0025, 12, [0,0,1])
+                        self.orifice_center_spheres.vertices = orifice_center_spheres_temp.vertices
+                        self.orifice_center_spheres.triangles = orifice_center_spheres_temp.triangles
+                        self.orifice_center_spheres.compute_vertex_normals()
+                        self.orifice_center_spheres.paint_uniform_color([0,0,1])
+                    
+                    
+                    else:
+                        self.orifice_center_point_cloud.points = orifice_center_points.points
+                        self.orifice_center_point_cloud.colors = orifice_center_points.colors
+
+                        orifice_center_spheres_temp = get_sphere_cloud(np.asarray(orifice_center_points.points), 0.0025, 12, [0,0,1])
+                        self.orifice_center_spheres.vertices = orifice_center_spheres_temp.vertices
+                        self.orifice_center_spheres.triangles = orifice_center_spheres_temp.triangles
+                        self.orifice_center_spheres.compute_vertex_normals()
+                        # print("just one sphere", np.asarray(self.orifice_center_spheres.vertices))
 
                 
             
