@@ -14,7 +14,7 @@
 
 
 
-  <node name="gating_visualizer_white_pump" pkg="aortascope" type="gating_signal_visualizer_white_pump.py" output="screen" />
+  <!-- <node name="gating_visualizer_white_pump" pkg="aortascope" type="gating_signal_visualizer_white_pump.py" output="screen" /> -->
   
   <node name="rosserial_node" pkg="rosserial_python" type="serial_node.py" output="screen"> 
     <param name="port" value="/dev/ttyACM0"/>   

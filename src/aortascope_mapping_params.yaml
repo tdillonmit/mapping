@@ -15,6 +15,9 @@ save_replay_data: 1
 # healthy first return manual segmentation
 tsdf_map : 1
 
+
+conf_threshold: 0.92  # lower is better for animals where branch segmentation is less certain
+
 # ML segmentation
 deeplumen_on : 0
 
@@ -64,7 +67,7 @@ steerable: 0
 
 # double_display: 1
 double_display: 1
-test_image: 0
+test_image: 1
 test_transform: 0
 machine: philips
 

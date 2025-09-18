@@ -688,6 +688,8 @@ class PointCloudUpdater:
         # healthy first return mapping for reference
         self.tsdf_map = config_yaml['tsdf_map']
 
+        self.conf_threshold = config_yaml['conf_threshold']
+
         self.deeplumen_on = config_yaml['deeplumen_on']
 
         self.deeplumen_slim_on = config_yaml['deeplumen_slim_on']
@@ -788,6 +790,8 @@ class PointCloudUpdater:
 
         # perform reconstruction of bin 3 and 8 and then register
 
+        self.write_folder = rospy.get_param('dataset',0)
+        
         # change directory to gated folder
         self.write_folder = self.write_folder + '/gated'
         create_folder(self.write_folder )
@@ -913,8 +917,6 @@ class PointCloudUpdater:
             #     TW_EM =  average_transform @ em_transforms[i]
 
 
-            
-
             # for eves dataset
             # time.sleep(0.1)
             # grayscale_image = cv2.cvtColor(grayscale_image, cv2.COLOR_BGR2GRAY) 
@@ -923,7 +925,7 @@ class PointCloudUpdater:
 
             try:
                 # pc_updater.image_callback(grayscale_image, TW_EM, i, model, dataset_name, gating, bin_number, pC_map, esdf_map, tsdf_map, killingfusion_save, dissection_parameterize, esdf_smoothing, certainty_coloring, vpC_map)
-                self.append_image_transform_pair(TW_EM, grayscale_image)
+                self.append_image_transform_pair(TW_EM, grayscale_image) #TURN TRY EXCEPT BACK ON
 
             except:
                 print("image skipped on replay!")
@@ -1526,7 +1528,7 @@ class PointCloudUpdater:
         if(self.refine==1):
             self.centerline_pc = o3d.io.read_point_cloud(self.write_folder + '/centerline_pc_refine.ply')
 
-        
+        # o3d.visualization.draw_geometries([self.centerline_pc, self.registered_ct_lineset])
 
 
         # NOte that ivus centroids have been used here!!!
@@ -1565,7 +1567,7 @@ class PointCloudUpdater:
             avg_edge_length = np.mean(np.concatenate([e0, e1, e2]))
 
         print("subdivision complete, computing coarse to fine mapping!")
-        self.knn_idxs, self.knn_weights = precompute_knn_mapping(self.registered_ct_mesh, self.registered_ct_mesh_2, k=5)
+        self.knn_idxs, self.knn_weights = precompute_knn_mapping(self.registered_ct_mesh, self.registered_ct_mesh_2, k=3)
         self.coarse_template_vertices = copy.deepcopy(np.asarray(self.registered_ct_mesh.vertices))
         self.fine_template_vertices = copy.deepcopy(np.asarray(self.registered_ct_mesh_2.vertices))
         self.adjacency_matrix = build_adjacency_matrix(self.registered_ct_mesh_2)
@@ -1608,7 +1610,7 @@ class PointCloudUpdater:
 
         # self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.00225, 20, [0,1,0])
         # self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.004, 20, [0,1,0])
-        self.knn_idxs_spheres, self.knn_weights_spheres = precompute_knn_mapping(self.registered_ct_mesh, self.ct_centroids, k=5)
+        self.knn_idxs_spheres, self.knn_weights_spheres = precompute_knn_mapping(self.registered_ct_mesh, self.ct_centroids, k=3)
 
 
         
@@ -1880,7 +1882,10 @@ class PointCloudUpdater:
 
         if(self.cardiac_deformation==1):
 
-            
+            # uncomment if crashes quicker
+            self.vertices_before = copy.deepcopy(np.asarray(self.ct_spheres.vertices))
+            self.knn_idxs_spheres, self.knn_weights_spheres = precompute_knn_mapping(self.registered_ct_mesh, self.vertices_before, k=3)
+
             # get the ecg calibration
             t_start = rospy.Time.now()
             t_start = t_start.to_sec()
@@ -2671,9 +2676,32 @@ class PointCloudUpdater:
                 
 
                 # mask_1, mask_2 = deeplumen_segmentation(image,self.model)
-                pred= deeplumen_segmentation(image,self.model)
+                pred, conf_class2= deeplumen_segmentation(image,self.model)
+                # pred, conf_class2, conf_colormap, overlay = deeplumen_segmentation(image, self.model)
                 raw_data = pred[0].numpy()
-                mask_1, mask_2 = post_process_deeplumen(raw_data)
+                mask_1, mask_2 = post_process_deeplumen(raw_data, conf_class2, self.conf_threshold)
+
+                
+
+            
+                # confidence mapping
+                # conf_vis = (conf_class2 * 255).astype(np.uint8)
+                # conf_vis = cv2.applyColorMap(conf_vis, cv2.COLORMAP_JET)
+                # image_copy = copy.deepcopy(image)
+                # overlay = cv2.addWeighted(image_copy, 0.6, conf_vis, 0.4, 0)
+                # cv2.imshow("Class 2 Confidence Overlay", overlay)
+                # cv2.waitKey(0)
+
+                # now you can safely do numpy conversions
+                # if conf_class2 is not None:
+                #     max_conf_class2 = tf.reduce_max(conf_class2).numpy()
+                #     print("max conf:", max_conf_class2)
+                #     conf_class2_np = conf_class2.numpy()  # float confidence map
+                #     cv2.imshow("Confidence", conf_colormap.numpy())
+                #     cv2.waitKey(0)
+
+                        
+                
 
                 # get_gpu_temp()
                 # get_cpu_temp()
@@ -2682,26 +2710,25 @@ class PointCloudUpdater:
                 diff_time=end_time-start_time
                 print("segmentation time:", diff_time)
 
-                if(self.deeplumen_valve_on == 1):
-                    pred= deeplumen_segmentation(image,self.model_cusp)
-                    raw_data = pred[0].numpy()
-                    mask_1_opening, mask_2_cusp = post_process_deeplumen(raw_data)
+
+                # this was coded for when deeplumen valve wasn't coded properly
+                # if(self.deeplumen_valve_on == 1):
+                #     pred= deeplumen_segmentation(image,self.model_cusp)
+                #     raw_data = pred[0].numpy()
+                #     mask_1_opening, mask_2_cusp = post_process_deeplumen(raw_data)
 
 
-                    # get mask_2 as subtraction of mask_1_opening from mask_1
-                    # overwriting output from ML model!!
+                #     # get mask_2 as subtraction of mask_1_opening from mask_1
+                #     # overwriting output from ML model!!
                     
-                    # mask_2 = np.logical_and(mask_1 == 1, mask_1_opening == 0).astype(np.uint8)
-                    mask_2 = np.clip(mask_1 - mask_1_opening, 0, 1)
-                    mask_1 = mask_1_opening
+                #     # mask_2 = np.logical_and(mask_1 == 1, mask_1_opening == 0).astype(np.uint8)
+                #     mask_2 = np.clip(mask_1 - mask_1_opening, 0, 1)
+                #     mask_1 = mask_1_opening
 
-                    # cv2.imshow("mask 2 example", mask_2)
-                    # cv2.waitKey(0)
+                #     # cv2.imshow("mask 2 example", mask_2)
+                #     # cv2.waitKey(0)
 
                     
-
-
-            
 
             if(self.deeplumen_lstm_on == 1):
 
@@ -2772,14 +2799,14 @@ class PointCloudUpdater:
             branch_pixels = np.count_nonzero(mask_2)
 
 
-            if(self.previous_mask is None):
+            if(self.previous_mask is None): 
                 self.previous_mask = np.zeros_like(mask_2,dtype=np.uint8)
 
             # every point for orifice detection
             mask_1_contour_every_point,hier = cv2.findContours(mask_1, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
             
-        
+            if(branch_visible = np.any(mask_2 > 0)):
             if(self.orifice_center_map == 1 ):
 
 
@@ -2844,7 +2871,7 @@ class PointCloudUpdater:
 
                 # ----- DETEMINE IF OVERLAP EXISTS ------ #
 
-                branch_visible = np.any(mask_2 > 0)
+                
 
                 # if a branch is visible and branch mask borders red mask
                 if(branch_visible and nearest_indices.size > 0):
@@ -2864,10 +2891,6 @@ class PointCloudUpdater:
 
                     num_overlap_pixels = np.sum(overlap)
                     threshold = 10
-
-
-                    # NOT NEEDED FOR NOW?
-                    # centroid_mask_1 = get_centroid_from_contour(np.asarray(mask_1_contour_every_point[0]),scaling)
 
                     # only calculated if blue mask is close to the border of red
                     orifice_two_d = np.asarray(contiguous_block_points[mid_index]).squeeze()
@@ -2903,6 +2926,20 @@ class PointCloudUpdater:
             cv2.drawContours(grayscale_image, mask_1_contour, -1, (0, 0, 255), thickness=1)
             cv2.drawContours(grayscale_image, mask_2_contour, -1, (255, 0, 0), thickness=1)
 
+            # for visualizing ransac
+            # print("spline pixels", spline_pixels)
+            # if spline_pixels is not None and len(spline_pixels) > 0:
+            #     # rescale spline points to match original_image size
+            #     spline_pixels_scaled = spline_pixels.copy().astype(np.float32)
+            #     spline_pixels_scaled[:, 0] *= (np.shape(original_image)[0] / mask_1.shape[0])   # scale x
+            #     spline_pixels_scaled[:, 1] *= (np.shape(original_image)[1] / mask_1.shape[1])   # scale y
+
+            #     # reshape into OpenCV contour format
+            #     spline_contour_send = spline_pixels_scaled.astype(np.int32).reshape((-1, 1, 2))
+
+            #     # draw
+            #     cv2.drawContours(original_image, [spline_contour_send], -1, (255, 0, 255), thickness=2)
+
             
             # header = Header(stamp=msg.header.stamp, frame_id=msg.header.frame_id)
             # rgb_image_msg = Image(
@@ -2919,11 +2956,13 @@ class PointCloudUpdater:
             original_image = cv2.cvtColor(original_image, cv2.COLOR_GRAY2BGR)
             mask_1_send = cv2.resize(mask_1, (np.shape(original_image)[0], np.shape(original_image)[1]))
             mask_2_send = cv2.resize(mask_2, (np.shape(original_image)[0], np.shape(original_image)[1]))
+
             # rather than finding contours, just colour mask to save time
             mask_1_contour_send,hier = cv2.findContours(mask_1_send, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             mask_2_contour_send,hier = cv2.findContours(mask_2_send, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             cv2.drawContours(original_image, mask_1_contour_send, -1, (0, 0, 255), thickness=2)
             cv2.drawContours(original_image, mask_2_contour_send, -1, (255, 0, 0), thickness=2)
+            
             # header = Header(stamp=msg.header.stamp, frame_id=msg.header.frame_id)
             rgb_image_msg = Image(
                 # header=header,
@@ -3172,8 +3211,8 @@ class PointCloudUpdater:
 
 
                 # if you want all the point cloud points (will be really slow)
-                if(self.extend == 1):
-                # if(self.extend == 1 and (self.dissection_mapping == 1 or self.refine==1)):
+                # if(self.extend == 1):
+                if(self.extend == 1 and (self.dissection_mapping == 1 or self.refine==1 or self.pullback==0)):
                     # prevent memory issues by commenting this out
                     self.volumetric_near_point_cloud.points.extend(near_vpC_points.points)
                 else:
@@ -3238,10 +3277,7 @@ class PointCloudUpdater:
 
             if(self.cardiac_deformation==1):
       
-                # print("self.ecg_threshold", self.ecg_threshold)
-                # print("self.ecg_latest", self.ecg_latest)
-                # print("self.ecg_previous", self.ecg_previous)
-                # if (self.ecg_previous >= self.ecg_threshold) and (self.ecg_latest < self.ecg_threshold):
+ 
 
                 t = rospy.Time.now()
                 t = t.to_sec()
@@ -3287,8 +3323,18 @@ class PointCloudUpdater:
 
                 # self.registered_ct_mesh_2.vertices = deformed_mesh.vertices
                 self.registered_ct_mesh_2.vertices = o3d.utility.Vector3dVector(fine_deformed_vertices)
-                self.registered_ct_mesh_2.compute_vertex_normals()
+                # self.registered_ct_mesh_2.compute_vertex_normals()
                 self.vis2.update_geometry(self.registered_ct_mesh_2)
+
+                # ct_spheres_deformed_points = deform_points_using_knn(self.registered_ct_mesh, self.deformed_mesh,  self.knn_idxs_spheres, self.knn_weights_spheres, self.coarse_template_vertices, self.ct_centroids, self.adjacency_matrix)
+
+                
+                ct_spheres_deformed_vertices = deform_points_using_knn(self.registered_ct_mesh, self.deformed_mesh,  self.knn_idxs_spheres, self.knn_weights_spheres, self.coarse_template_vertices, self.vertices_before, self.adjacency_matrix)
+                # ct_spheres_temp = get_sphere_cloud(ct_spheres_deformed_points , 0.00225, 20, [0,1,0])
+                # self.ct_spheres.vertices =  ct_spheres_temp.vertices
+                self.ct_spheres.vertices =  o3d.utility.Vector3dVector(ct_spheres_deformed_vertices)
+                self.vis.update_geometry(self.ct_spheres)
+                self.vis2.update_geometry(self.ct_spheres)
 
                 self.ecg_previous = self.ecg_latest
                 
