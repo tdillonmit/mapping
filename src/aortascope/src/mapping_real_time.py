@@ -918,7 +918,7 @@ class PointCloudUpdater:
         sorted_transforms=sort_folder_string(transform_path, "TW_EM_")
         em_transforms=load_transform_data_from_folder(sorted_transforms)
 
-        print("pulling from folder",self.write_folder  )
+        print("pulling from folder",self.write_folder)
         print("number of loaded images:", len(grayscale_images))
 
 
@@ -928,10 +928,10 @@ class PointCloudUpdater:
         # if(self.centre_data == 1):
         #     average_transform = get_transform_data_center(em_transforms)
 
-        # for i in np.arange(starting_index,ending_index):
+        for i in np.arange(starting_index,ending_index):
         # for i in np.arange(300,ending_index): # for troubleshooting ransac on k8_pva_tom_2
         # for i in np.arange(2350,ending_index): # for troubleshooting branch pass
-        for i in np.arange(2535,ending_index): # for troubleshooting branch pass
+        # for i in np.arange(2535,ending_index): # for troubleshooting branch pass
 
             print(f"image index: {i}")
 
@@ -954,12 +954,12 @@ class PointCloudUpdater:
 
             # grayscale_image=preprocess_ivus_image(grayscale_image, pc_updater.box_crop, pc_updater.circle_crop, pc_updater.text_crop, pc_updater.crosshairs_crop)
 
-            # try:
+            try:
                 # pc_updater.image_callback(grayscale_image, TW_EM, i, model, dataset_name, gating, bin_number, pC_map, esdf_map, tsdf_map, killingfusion_save, dissection_parameterize, esdf_smoothing, certainty_coloring, vpC_map)
-            self.append_image_transform_pair(TW_EM, grayscale_image) #TURN TRY EXCEPT BACK ON
+                self.append_image_transform_pair(TW_EM, grayscale_image) #TURN TRY EXCEPT BACK ON
 
-            # except:
-            #     print("image skipped on replay!")
+            except:
+                print("image skipped on replay!")
 
             # except KeyboardInterrupt:
             #     print("Ctrl+C detected, stopping visualizer...")
@@ -3178,140 +3178,182 @@ class PointCloudUpdater:
                 # END orifice finding
 
             
-            final_component_data = []
-            # every point for orifice detection
-            mask_1_contour_every_point, hier = cv2.findContours(mask_1, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-            indices_added = []
 
-            buffers_touched = set()
+            if(self.orifice_center_map):
 
-            new_check=0
+                final_component_data = []
+                # every point for orifice detection
+                mask_1_contour_every_point, hier = cv2.findContours(mask_1, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+                indices_added = []
 
-            empty_mask = np.zeros_like(mask_2, dtype=np.uint8)
-            self.mask_2_buffers[0].append([self.mask_2_buffers[0][-1][0], empty_mask, np.nan])
-            self.mask_2_buffers[1].append([self.mask_2_buffers[1][-1][0], empty_mask, np.nan])
+                buffers_touched = set()
 
-            
+                new_check=0
 
-            for component_mask in largest_two_masks:
+                empty_mask = np.zeros_like(mask_2, dtype=np.uint8)
+                self.mask_2_buffers[0].append([self.mask_2_buffers[0][-1][0], empty_mask, np.nan])
+                self.mask_2_buffers[1].append([self.mask_2_buffers[1][-1][0], empty_mask, np.nan])
+
                 
-                orifice_two_d =np.nan
 
-                num_overlaps=[]
-                
-                for mask_2_buffer in self.mask_2_buffers:
+                for component_mask in largest_two_masks:
                     
-           
-                    masks = [entry[1] for entry in list(mask_2_buffer)[-self.branch_buffer_size-1:-1]] # -1 doesn't include the last
-              
-                    combined_previous_mask = np.logical_or.reduce(np.stack(masks, axis=0))
-         
-
-                    combined_previous_mask = (combined_previous_mask * 255).astype(np.uint8)                            
-                    overlap = np.logical_and(combined_previous_mask == 255, component_mask == 255)
-                    
-                    num_overlap_pixels = np.sum(overlap)
-                    
-          
-                    num_overlaps.append(num_overlap_pixels)
-
-
                 
-                threshold = 10
-                overlap_1, overlap_2 = None, None
+                    # ------ FIND ORIFICE PIXELS ------- #
+                    kernel = np.ones((self.minimum_thickness, self.minimum_thickness), np.uint8)
+                    dilated_mask_1 = cv2.dilate(mask_1, kernel, iterations=1)
+                    touching_pixels = cv2.bitwise_and(dilated_mask_1, component_mask)
+                    non_zero_pixels = np.column_stack(np.where(touching_pixels > 0))
+                    contour_points = np.vstack(mask_1_contour_every_point).squeeze()
+                    non_zero_pixels_xy = non_zero_pixels[:, [1, 0]]
+                    distances = cdist(non_zero_pixels_xy, contour_points, metric='euclidean')
+                    nearest_indices = distances.argmin(axis=1)
 
-                if num_overlaps[0] > threshold:
-                    overlap_1 = num_overlaps[0]
-
-                if num_overlaps[1] > threshold:
-                    overlap_2 = num_overlaps[1]
-
-                # determine which branch id component overlaps with more
-                if overlap_1 is not None and overlap_2 is not None:
-                    if overlap_1 > overlap_2:
-                        print("both overlap, 1 greater")
-                        branch_pass_id = self.mask_2_buffers[0][-1][0]
-                        relevant_buffer = 0
-                        print("fetched branch_pass_id", branch_pass_id)
-                    else:
-                        print("both overlap, 2 greater")
-                        branch_pass_id = self.mask_2_buffers[1][-1][0]
-                        relevant_buffer = 1
-                        print("fetched branch_pass_id", branch_pass_id)
-
-                elif overlap_1 is not None:
-                    print("1 overlap only")
-                    branch_pass_id = self.mask_2_buffers[0][-1][0]
-                    relevant_buffer = 0
-                    print("fetched branch_pass_id", branch_pass_id)
-
-                elif overlap_2 is not None:
-                    print("2 overlap only")
-                    branch_pass_id = self.mask_2_buffers[1][-1][0]
-                    relevant_buffer = 1
-                    print("fetched branch_pass_id", branch_pass_id)
-
-
-                else:
                     
+                    # if branch touches mask 1
+                    if nearest_indices.size > 0:
 
-                    print("no overlap")
-                    # no overlap at all → new branch
+                        # if so, find the ORIFICE CENTER
+                        contiguous_indices, contiguous_block_points = get_contiguous_block_from_contour(
+                            contour_points, nearest_indices
+                        )
+                        orifice_mask = component_mask
+                        contour_points = np.asarray(contiguous_block_points)
+                        normals = visualize_contour_normals(orifice_mask, contour_points)
+                        raycast_hits, ray_lengths = compute_branch_raycast_hits(component_mask, contour_points, normals)
+                        mid_index = len(raycast_hits) // 2
+                        orifice_center_three_d_points = get_single_point_cloud_from_pixels(
+                            [contiguous_block_points[mid_index]], scaling
+                        )
+
+                        # DETERMINE IF OVERLAP EXISTS WITH BUFFERS
+                        
+                        
+                        orifice_two_d = np.asarray(contiguous_block_points[mid_index]).squeeze()
+
+                        num_overlaps=[]
+                        average_orifice_angles=[]
+                        
+                        for mask_2_buffer in self.mask_2_buffers:
+                            
+                
+                            masks = [entry[1] for entry in list(mask_2_buffer)[-self.branch_buffer_size-1:-1]] # -1 doesn't include the last
                     
-                    self.branch_pass = self.branch_pass + 1
-                    branch_pass_id = self.branch_pass
-                    
-         
-                    new_mask_2_buffer = self.init_buffer(0, self.branch_buffer_size, (224, 224))
-                    self.mask_2_buffers.append(new_mask_2_buffer)
-                    relevant_buffer = len(self.mask_2_buffers) - 1
-
-            
-
-                
-                # if(branch_pass_id !=None or self.branch_pass<=1):
-                    # append results
-                volumetric_three_d_points_far_lumen = get_single_point_cloud_from_mask(component_mask, scaling)
-                branch_pixels = np.count_nonzero(component_mask)
-                
-                # OMMITTING FOR NOW!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                final_component_data.append(
-                    [branch_pass_id, None, volumetric_three_d_points_far_lumen, branch_pixels]
-                )
-
-                # self.mask_2_buffers[relevant_buffer].append([branch_pass_id, component_mask, orifice_two_d])
-                
-                self.mask_2_buffers[relevant_buffer][-1] = [branch_pass_id, component_mask, orifice_two_d]
+                            combined_previous_mask = np.logical_or.reduce(np.stack(masks, axis=0))
                 
 
-                    # if it doesn't touch don't add anything to final component data (add masks since untouched buffers)
-                # else:
-                #     # ignore easy
-                #     orifice_three_d_points = None
-                #     orifice_center_three_d_points = None
-                #     volumetric_three_d_points_far_lumen = None
-                #     branch_pixels = 0
-                #     branch_pass_id = None
-                #     final_component_data.append(
-                #         [branch_pass_id, orifice_center_three_d_points, volumetric_three_d_points_far_lumen, branch_pixels]
-                #     )
+                            combined_previous_mask = (combined_previous_mask * 255).astype(np.uint8)                            
+                            overlap = np.logical_and(combined_previous_mask == 255, component_mask == 255)
+                            
+                            num_overlap_pixels = np.sum(overlap)
+                            
+                
+                            num_overlaps.append(num_overlap_pixels)
+
+
+                            # adding angle component
+                            angles = []
+                            for entry in list(mask_2_buffer)[-self.branch_buffer_size-1:-1]:
+                                angle = np.array(entry[2], dtype=float).ravel()
+                                if angle.shape[0] == 2:
+                                    angles.append(angle)
+                                else:
+                                    angles.append(np.array([np.nan, np.nan]))
+
+                            if angles:
+                                angles = np.vstack(angles)  # shape (k, 2)
+                                average_orifice_angle = np.nanmean(angles, axis=0)
+                            else:
+                                average_orifice_angle = np.array([np.nan, np.nan])
+                            
+                            # average_orifice_angle = np.nanmean(list(mask_2_buffer)[-n-1:-1, 3], axis=0)
+                            average_orifice_angles.append(average_orifice_angle)
+
+                        average_orifice_angles = np.asarray(average_orifice_angles)
 
                         
+                        threshold = 10
+                        angle_threshold = 25
+                        overlap_1, overlap_2 = None, None
 
-            show_masks_from_buffer(self.mask_2_buffers[0], n=self.branch_buffer_size, win_name="Buffer 0")
-            show_masks_from_buffer(self.mask_2_buffers[1], n=self.branch_buffer_size, win_name="Buffer 1")
+
+                        if(num_overlaps[0] > threshold and np.linalg.norm((orifice_two_d-average_orifice_angles[0,:]),axis=0) < angle_threshold):
+                            overlap_1 = num_overlaps[0]
+                            
+
+                        if(num_overlaps[1]> threshold and np.linalg.norm((orifice_two_d-average_orifice_angles[1,:]),axis=0) < angle_threshold):
+                            overlap_2 = num_overlaps[1]
+
+                        # if num_overlaps[0] > threshold:
+                        #     overlap_1 = num_overlaps[0]
+
+                        # if num_overlaps[1] > threshold:
+                        #     overlap_2 = num_overlaps[1]
+
+                        # determine which branch id component overlaps with more
+                        if overlap_1 is not None and overlap_2 is not None:
+                            if overlap_1 > overlap_2:
+                                # print("both overlap, 1 greater")
+                                branch_pass_id = self.mask_2_buffers[0][-1][0]
+                                relevant_buffer = 0
+                                # print("fetched branch_pass_id", branch_pass_id)
+                            else:
+                                # print("both overlap, 2 greater")
+                                branch_pass_id = self.mask_2_buffers[1][-1][0]
+                                relevant_buffer = 1
+                                # print("fetched branch_pass_id", branch_pass_id)
+
+                        elif overlap_1 is not None:
+                            # print("1 overlap only")
+                            branch_pass_id = self.mask_2_buffers[0][-1][0]
+                            relevant_buffer = 0
+                            # print("fetched branch_pass_id", branch_pass_id)
+
+                        elif overlap_2 is not None:
+                            # print("2 overlap only")
+                            branch_pass_id = self.mask_2_buffers[1][-1][0]
+                            relevant_buffer = 1
+                            # print("fetched branch_pass_id", branch_pass_id)
+
+
+                        else:
+                            
+
+                            # print("no overlap")
+                            # no overlap at all → new branch
+                            
+                            self.branch_pass = self.branch_pass + 1
+                            branch_pass_id = self.branch_pass
+                            
+                
+                            new_mask_2_buffer = self.init_buffer(0, self.branch_buffer_size, (224, 224))
+                            self.mask_2_buffers.append(new_mask_2_buffer)
+                            relevant_buffer = len(self.mask_2_buffers) - 1
+
+                    
+
+                        
+                        # if(branch_pass_id !=None or self.branch_pass<=1):
+                            # append results
+                        volumetric_three_d_points_far_lumen = get_single_point_cloud_from_mask(component_mask, scaling)
+                        branch_pixels = np.count_nonzero(component_mask)
+                        
+                        # print("branch_pass_id being added", branch_pass_id)
+                        final_component_data.append(
+                            [branch_pass_id, orifice_center_three_d_points, volumetric_three_d_points_far_lumen, branch_pixels]
+                        )
+
+                        # self.mask_2_buffers[relevant_buffer].append([branch_pass_id, component_mask, orifice_two_d])
+                        
+                        self.mask_2_buffers[relevant_buffer][-1] = [branch_pass_id, component_mask, orifice_two_d]
+                
+
+            # visualize the buffers with this!
+            # show_masks_from_buffer(self.mask_2_buffers[0], n=self.branch_buffer_size, win_name="Buffer 0")
+            # show_masks_from_buffer(self.mask_2_buffers[1], n=self.branch_buffer_size, win_name="Buffer 1")
            
 
-            # # add an empty mask to untouched buffers
-            # untouched = {0, 1} - buffers_touched
-            # empty_mask = np.zeros_like(mask_2, dtype=np.uint8)
-            # for idx in untouched:
-            #     print("idx", idx)
-            #     self.mask_2_buffers[idx].append([self.mask_2_buffers[idx][-1][0], empty_mask, np.nan])
-
-
-
-
+    
             # ---- PUBLISH IMAGE ----- #
 
             start_time = time.time()
@@ -3364,8 +3406,8 @@ class PointCloudUpdater:
             cv2.drawContours(original_image, mask_1_contour_send, -1, (0, 0, 255), thickness=2)
             cv2.drawContours(original_image, mask_2_contour_send, -1, (255, 0, 0), thickness=2)
 
-            cv2.imshow("original_image", original_image)
-            cv2.waitKey(0)
+            # cv2.imshow("original_image", original_image)
+            # cv2.waitKey(0)
             
             # header = Header(stamp=msg.header.stamp, frame_id=msg.header.frame_id)
             rgb_image_msg = Image(
@@ -3771,6 +3813,7 @@ class PointCloudUpdater:
                     # for results evaluation
                     max_branch_pass = 255  # Set based on your application needs
                     # normalized_pass = self.branch_pass / max_branch_pass  # Scale to [0, 1]
+                    # print("branch pass for colors vpc" ,branch_pass)
                     normalized_pass = branch_pass / max_branch_pass  # Scale to [0, 1]
                     max_branch_pixels = 2000.0
                     normalized_branch_pixels = branch_pixels / max_branch_pixels
@@ -4012,7 +4055,8 @@ class PointCloudUpdater:
                     
 
                     max_branch_pass = 255  # Set based on your application needs
-                    normalized_pass = self.branch_pass / max_branch_pass  # Scale to [0, 1]
+                    # normalized_pass = self.branch_pass / max_branch_pass  # Scale to [0, 1]
+                    normalized_pass = branch_pass / max_branch_pass  # Scale to [0, 1]
 
             
                     max_branch_pixels = 2000.0
