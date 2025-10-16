@@ -5,7 +5,7 @@ savepath : user_has_not_defined
 
 
 # is there an ECG signal?
-gating : 1
+gating : 0
 
 # record or just visualize data?
 record : 0
@@ -14,12 +14,13 @@ save_replay_data: 1
 
 # healthy first return manual segmentation
 tsdf_map : 1
+voxel_size : 0.005
 
 
 conf_threshold: 0.92  # lower is better for animals where branch segmentation is less certain
 
 # ML segmentation
-deeplumen_on : 0
+deeplumen_on : 1
 
 # model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/full_inkbit_aorta_2/weights.weights.h5
 # model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/combined_dataset/weights.h5
@@ -30,11 +31,14 @@ deeplumen_on : 0
 
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/k_phantom_models_from_scratch/weights.weights.h5
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/hybrid_cnn_imbalanced_full/weights.weights.h5
+model_path: /home/tdillon/segmentation/deepivus_trained_models/temp_cbam_model/weights.weights.h5
+# model_path: /home/tdillon/segmentation/deepivus_trained_models/temp_cbam_model/MLDRN_large_CBAM.keras'
 
 
-deeplumen_slim_on: 1
-model_path: /home/tdillon/segmentation/deepivus_trained_models/comprehensive_dataset_for_animal/weights.weights.h5
-model_path: /home/tdillon/segmentation/deepivus_trained_models/hybrid_unbalanced_slim/weights.weights.h5
+
+deeplumen_slim_on: 0
+# model_path: /home/tdillon/segmentation/deepivus_trained_models/comprehensive_dataset_for_animal/weights.weights.h5
+# model_path: /home/tdillon/segmentation/deepivus_trained_models/hybrid_unbalanced_slim/weights.weights.h5
 
 
 
@@ -70,6 +74,8 @@ double_display: 1
 test_image: 1
 test_transform: 0
 machine: philips
+
+figure_mapping: 0
 
 
 

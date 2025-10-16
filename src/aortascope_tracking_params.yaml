@@ -15,13 +15,17 @@ save_replay_data: 0
 
 # healthy first return manual segmentation
 tsdf_map : 0
+voxel_size : 0.005
 
 # ML segmentation
 deeplumen_on : 0
-deeplumen_slim_on: 1
 # model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/full_inkbit_aorta_2/weights.weights.h5
-model_path: /home/tdillon/segmentation/deepivus_trained_models/k_phantom_models_from_scratch/weights.weights.h5
+
 # model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/combined_dataset/weights.h5
+model_path: /home/tdillon/segmentation/deepivus_trained_models/temp_cbam_model/weights.weights.h5
+
+deeplumen_slim_on: 0
+# model_path: /home/tdillon/segmentation/deepivus_trained_models/k_phantom_models_from_scratch/weights.weights.h5
 
 model_path_cusps: /home/tdillon/segmentation/deepivus_trained_models/eve_train_2/weights.weights.h5
 deeplumen_lstm_on : 0
@@ -51,6 +55,7 @@ test_image: 0
 test_transform: 0
 machine: 'philips'
 
+figure_mapping: 0
 
 
 

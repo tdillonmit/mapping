@@ -27,7 +27,11 @@ from keras.layers import TFSMLayer
 from tensorflow.keras.models import load_model
 from tensorflow.keras.layers import ReLU, Activation, TimeDistributed
 from segmentation_helpers import BlurPool
+
+import matplotlib  
+# matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
+
 
 # from segmentation_helpers import build_temporal_segmenter 
 
@@ -231,6 +235,8 @@ class PointCloudUpdater:
         self.vis.add_geometry(self.catheter)
         self.vis.add_geometry(self.guidewire_cylinder)
         self.vis.add_geometry(self.tracker)
+
+        # print("added us frame")
         self.vis.add_geometry(self.us_frame)
         self.vis.add_geometry(self.tracker_frame)
         self.vis.add_geometry(self.baseframe)
@@ -330,6 +336,16 @@ class PointCloudUpdater:
         self.ecg_buffer = deque(maxlen=self.buffer_size)
         self.orifice_angles = deque(maxlen=5)
 
+        self.raylength_buffer = deque(maxlen=self.buffer_size)
+        plt.ion()
+        self.fig, self.ax = plt.subplots(figsize=(8, 4))
+        self.line, = self.ax.plot([], [], marker='o')
+        self.ax.set_xlabel("Frame Index")
+        self.ax.set_ylabel("Max Ray Length")
+        self.ax.grid(True)
+        # plt.show()
+
+
 
         # will be placed in initialization
         # self.mask_2A_buffer = deque(maxlen=self.buffer_size)
@@ -351,8 +367,8 @@ class PointCloudUpdater:
         
 
         # initialize two buffers
-        self.mask_2A_buffer = self.init_buffer(0, self.branch_buffer_size, (H, W))
-        self.mask_2B_buffer = self.init_buffer(1, self.branch_buffer_size, (H, W))
+        self.mask_2A_buffer = self.init_buffer(0, self.branch_buffer_size, (H, W), 0)
+        self.mask_2B_buffer = self.init_buffer(1, self.branch_buffer_size, (H, W), 0)
         self.mask_2_buffers = deque([self.mask_2A_buffer, self.mask_2B_buffer], maxlen=2)
 
 
@@ -382,13 +398,14 @@ class PointCloudUpdater:
 
         # TSDF 
         # whole lumen
-        self.voxel_size = 0.002
+        # self.voxel_size = 0.003
+        # self.voxel_size = 0.005
 
         # if(self.gating == 1):
         #     self.voxel_size = 0.0025
 
-        if(self.gating == 1):
-            self.voxel_size = 0.005
+        # if(self.gating == 1):
+        #     self.voxel_size = 0.005
 
         self.sdf_trunc = 3 * self.voxel_size
         # self.tsdf_volume = SimpleTsdfIntegrator(self.voxel_size, sdf_trunc)
@@ -417,7 +434,13 @@ class PointCloudUpdater:
 
         if(self.dissection_mapping!=1):
             self.mesh_near_lumen_lineset = o3d.geometry.LineSet()
-            self.vis.add_geometry(self.mesh_near_lumen_lineset)
+
+            if(self.figure_mapping==1):
+                self.tsdf_surface_pc = o3d.geometry.PointCloud()
+                self.vis.add_geometry(self.tsdf_surface_pc)
+                
+            else:
+                self.vis.add_geometry(self.mesh_near_lumen_lineset)
 
         
 
@@ -631,16 +654,28 @@ class PointCloudUpdater:
 
             
 
-            DRN_inputs_3,DRN_outputs_3 = get_DRN_network()
+            # DRN_inputs_3,DRN_outputs_3 = get_DRN_network()
+            # model = tf.keras.Model(inputs=DRN_inputs_3, outputs=DRN_outputs_3)
 
-            
-            model = tf.keras.Model(inputs=DRN_inputs_3, outputs=DRN_outputs_3)
+            # model = keras.models.load_model(
+            #     self.model_path,
+            #     custom_objects={'BlurPool': BlurPool}
+            # )
+
+            model = build_mldr_drn(input_shape=(224,224,3), num_classes=3, base=64,
+                        blocks_per_stage=(2,2,3,3,3), dilations=(1,2,4),
+                        dropout=0.2, upsample_stride=8,
+                        return_pyramid=False, name="MLDR_DRN_Large")
+
+            # 2. Use TF-Keras (not standalone Keras 3)
+            # 3. Load weights in H5 format, not .keras or SavedModel
+            model.load_weights(self.model_path)
 
             model.summary()
 
             
             # sub branch segmentation
-            model.load_weights( self.model_path)  
+            # model.load_weights( self.model_path)  
 
 
         
@@ -716,6 +751,8 @@ class PointCloudUpdater:
         # healthy first return mapping for reference
         self.tsdf_map = config_yaml['tsdf_map']
 
+        self.voxel_size = config_yaml['voxel_size']
+
         self.conf_threshold = config_yaml['conf_threshold']
 
         self.deeplumen_on = config_yaml['deeplumen_on']
@@ -767,6 +804,8 @@ class PointCloudUpdater:
         self.test_transform = config_yaml['test_transform']
 
         self.machine = config_yaml['machine']
+
+        self.figure_mapping = config_yaml['figure_mapping']
 
         # ---- LOAD ROS PARAMETERS ------ #
         param_names = ['/angle', '/translation','/scaling','/threshold','/no_points','/crop_index','/radial_offset','/oclock', '/constraint_radius','/pullback']
@@ -861,10 +900,10 @@ class PointCloudUpdater:
         except:
             print("processed centreline")
 
-        try:
-            self.vis.remove_geometry(self.us_frame)
-        except:
-            print("no us frame present")
+        # try:
+        #     self.vis.remove_geometry(self.us_frame)
+        # except:
+        #     print("no us frame present")
 
         try:
             self.vis.remove_geometry(self.mesh_near_lumen)
@@ -873,8 +912,12 @@ class PointCloudUpdater:
 
         try:
             self.vis.remove_geometry(self.volumetric_near_point_cloud)
-            # self.volumetric_near_point_cloud = o3d.geometry.PointCloud()
-            # self.vis.add_geometry(self.volumetric_near_point_cloud)
+
+            
+                # self.volumetric_near_point_cloud = o3d.geometry.PointCloud()
+                # self.vis.add_geometry(self.volumetric_near_point_cloud)
+
+            
         except:
             print("no volumetric near point cloud present")
 
@@ -923,6 +966,7 @@ class PointCloudUpdater:
 
 
         starting_index=0
+        # starting_index=1200
         ending_index=len(em_transforms)-1
 
         # if(self.centre_data == 1):
@@ -954,12 +998,12 @@ class PointCloudUpdater:
 
             # grayscale_image=preprocess_ivus_image(grayscale_image, pc_updater.box_crop, pc_updater.circle_crop, pc_updater.text_crop, pc_updater.crosshairs_crop)
 
-            try:
+            # try:
                 # pc_updater.image_callback(grayscale_image, TW_EM, i, model, dataset_name, gating, bin_number, pC_map, esdf_map, tsdf_map, killingfusion_save, dissection_parameterize, esdf_smoothing, certainty_coloring, vpC_map)
-                self.append_image_transform_pair(TW_EM, grayscale_image) #TURN TRY EXCEPT BACK ON
+            self.append_image_transform_pair(TW_EM, grayscale_image) #TURN TRY EXCEPT BACK ON
 
-            except:
-                print("image skipped on replay!")
+            # except:
+            #     print("image skipped on replay!")
 
             # except KeyboardInterrupt:
             #     print("Ctrl+C detected, stopping visualizer...")
@@ -996,9 +1040,14 @@ class PointCloudUpdater:
         if(self.save_replay_data == 1):
            
             self.record = 0
+
+            if(self.figure_mapping==1):
+                intentional_fail # was about to save uniform colour point cloud for figure mapping
             
   
             o3d.io.write_point_cloud(self.write_folder +  "/volumetric_near_point_cloud.ply", self.volumetric_near_point_cloud)
+
+            
 
             o3d.io.write_point_cloud(self.write_folder +  "/volumetric_far_point_cloud.ply", self.volumetric_far_point_cloud)
 
@@ -1149,10 +1198,10 @@ class PointCloudUpdater:
             # registration_done = rospy.get_param('registration_done', 0)
             time.sleep(1)
 
-    def init_buffer(self,branch_id, buffer_size, shape):
+    def init_buffer(self,branch_id, buffer_size, shape, branch_pass_trigger):
             H, W = shape
             zero_mask = np.zeros((H, W), dtype=np.uint8)
-            return deque([[branch_id, zero_mask.copy(), np.nan] for _ in range(buffer_size)],
+            return deque([[branch_id, zero_mask.copy(), np.nan, branch_pass_trigger] for _ in range(buffer_size)],
                         maxlen=buffer_size)
 
     def prompt_for_folder(self):
@@ -1192,6 +1241,9 @@ class PointCloudUpdater:
         
        
         rospy.set_param('dataset', self.write_folder)   
+
+        if(self.figure_mapping==1):
+            intentional_fail # was about to save uniform colour point cloud for figure mapping
 
         
 
@@ -1783,10 +1835,10 @@ class PointCloudUpdater:
         
 
         # if IVUS present in tracking catheter
-        # try:
-        #     self.vis.remove_geometry(self.us_frame)
-        # except:
-        #     print("no us frame present")
+        try:
+            self.vis.remove_geometry(self.us_frame)
+        except:
+            print("no us frame present")
         try:
             self.vis.remove_geometry(self.volumetric_near_point_cloud)
         except:
@@ -2528,7 +2580,6 @@ class PointCloudUpdater:
 
         original_image = grayscale_image.copy()
         
-
         # fetch rospy parameters for real time mapping (could be placed in initialization)
         threshold = self.threshold
         no_points = self.no_points
@@ -3191,8 +3242,8 @@ class PointCloudUpdater:
                 new_check=0
 
                 empty_mask = np.zeros_like(mask_2, dtype=np.uint8)
-                self.mask_2_buffers[0].append([self.mask_2_buffers[0][-1][0], empty_mask, np.nan])
-                self.mask_2_buffers[1].append([self.mask_2_buffers[1][-1][0], empty_mask, np.nan])
+                self.mask_2_buffers[0].append([self.mask_2_buffers[0][-1][0], empty_mask, np.nan, 0])
+                self.mask_2_buffers[1].append([self.mask_2_buffers[1][-1][0], empty_mask, np.nan, 0])
 
                 
 
@@ -3228,6 +3279,10 @@ class PointCloudUpdater:
 
                         # DETERMINE IF OVERLAP EXISTS WITH BUFFERS
                         
+
+                        
+                        
+
                         
                         orifice_two_d = np.asarray(contiguous_block_points[mid_index]).squeeze()
 
@@ -3319,22 +3374,63 @@ class PointCloudUpdater:
                         else:
                             
 
-                            # print("no overlap")
+                            print("no overlap")
                             # no overlap at all → new branch
                             
                             self.branch_pass = self.branch_pass + 1
                             branch_pass_id = self.branch_pass
                             
                 
-                            new_mask_2_buffer = self.init_buffer(0, self.branch_buffer_size, (224, 224))
+                            new_mask_2_buffer = self.init_buffer(0, self.branch_buffer_size, (224, 224), 0)
                             self.mask_2_buffers.append(new_mask_2_buffer)
                             relevant_buffer = len(self.mask_2_buffers) - 1
 
-                    
+                            branch_pass_trigger = 0
+
+
+                        # AREA - DIP LOGIC (note that branch trigger logic outside of this is harmless if you just comment this block out)
+                        # special case to split branch passes if they are close together and there is no complete loss of overlap
+                        # detect a dip followed by a rise
+
+                        # detect dip
+                        buffer_masks = [entry[1] for entry in self.mask_2_buffers[relevant_buffer]]
+                        max_branch_pass_area = max(np.count_nonzero(m) for m in buffer_masks)
+
+                        last_branch_pass_trigger = self.mask_2_buffers[relevant_buffer][-2][3]
+
+                        print("last branch pass trigger", last_branch_pass_trigger)
+
+                        if(np.count_nonzero(component_mask) < 0.66 * max_branch_pass_area):
+                            branch_pass_trigger = 1
+                            print("triggered!")
+                            
+                        
+                        else:
+                            branch_pass_trigger = 0
+                        
+                        if last_branch_pass_trigger == 1:
+                            branch_pass_trigger = 1
+
+                        # detect rise
+                        
+                        if(np.count_nonzero(component_mask) > 0.825 * max_branch_pass_area and last_branch_pass_trigger ==1):
+                            self.branch_pass = self.branch_pass + 1
+                            branch_pass_id = self.branch_pass
+                            
+                
+                            new_mask_2_buffer = self.init_buffer(0, self.branch_buffer_size, (224, 224), 0)
+                            self.mask_2_buffers.append(new_mask_2_buffer)
+                            relevant_buffer = len(self.mask_2_buffers) - 1
+
+                            branch_pass_trigger = 0
+
+                            print("detected rise!")
+
+                        # END OF AREA DIP LOGIC
 
                         
                         # if(branch_pass_id !=None or self.branch_pass<=1):
-                            # append results
+                        # append results
                         volumetric_three_d_points_far_lumen = get_single_point_cloud_from_mask(component_mask, scaling)
                         branch_pixels = np.count_nonzero(component_mask)
                         
@@ -3344,8 +3440,37 @@ class PointCloudUpdater:
                         )
 
                         # self.mask_2_buffers[relevant_buffer].append([branch_pass_id, component_mask, orifice_two_d])
+
                         
-                        self.mask_2_buffers[relevant_buffer][-1] = [branch_pass_id, component_mask, orifice_two_d]
+                        self.mask_2_buffers[relevant_buffer][-1] = [branch_pass_id, component_mask, orifice_two_d, branch_pass_trigger]
+
+                   
+                
+                
+                # if 'ray_lengths' in locals() and ray_lengths:
+                #     # self.raylength_buffer.append(max(ray_lengths))
+                #     self.raylength_buffer.append(np.count_nonzero(mask_2)) # should be component mask
+                # else:
+                #     self.raylength_buffer.append(0)  # or np.nan, or skip entirely
+
+                # print("most recent raylengths:", self.raylength_buffer)
+
+                
+
+                # plt.figure(figsize=(8, 4))
+                # plt.plot(self.raylength_buffer, marker='o')
+                # plt.xlabel("Frame Index")
+                # plt.ylabel("Max Ray Length")
+                # plt.grid(True)
+                # plt.show(block=False)
+                # print("showing buffer!")
+
+                # update line data
+                # self.line.set_data(range(len(self.raylength_buffer)), self.raylength_buffer)
+                # self.ax.relim()
+                # self.ax.autoscale_view()
+                # plt.show()
+                # plt.pause(0.001)  
                 
 
             # visualize the buffers with this!
@@ -3353,6 +3478,7 @@ class PointCloudUpdater:
             # show_masks_from_buffer(self.mask_2_buffers[1], n=self.branch_buffer_size, win_name="Buffer 1")
            
 
+            
     
             # ---- PUBLISH IMAGE ----- #
 
@@ -3587,8 +3713,17 @@ class PointCloudUpdater:
                         #     self.mesh_n
                         # else:
 
+                        # if(self.figure_mapping==1):
+
+                        #     self.mesh_near_lumen_lineset.paint_uniform_color([0,0,1])
+
                         if(self.refine ==0):
                             self.vis.update_geometry(self.mesh_near_lumen_lineset)
+
+                            if(self.figure_mapping==1):
+                                self.tsdf_surface_pc.points = self.mesh_near_lumen_lineset.points
+                                self.tsdf_surface_pc.paint_uniform_color([0,0,1])
+                                self.vis.update_geometry(self.tsdf_surface_pc)
 
                 if(three_d_points_far_lumen is not None):
                     update_tsdf_mesh(self.vis,self.tsdf_volume_far_lumen,self.mesh_far_lumen,three_d_points_far_lumen, extrinsic_matrix,[0,0,1], keep_largest =False)
@@ -3840,6 +3975,10 @@ class PointCloudUpdater:
 
                         self.volumetric_far_point_cloud.points.extend(far_vpC_points.points)
                         self.volumetric_far_point_cloud.colors.extend(far_vpC_points.colors)
+
+                        if(self.figure_mapping==1):
+                            # note this will mess up branch pass
+                            self.volumetric_far_point_cloud.paint_uniform_color([0,0,1])
 
                     else:
                         self.volumetric_far_point_cloud.points = far_vpC_points.points
@@ -4177,12 +4316,16 @@ class PointCloudUpdater:
         # if(self.registered_ct!=1):
             
             
-        self.previous_transform_us=TW_EM @ TEM_C
+        
+
+        # print("appending frame!")
         self.us_frame.transform(get_transform_inverse(self.previous_transform_us))
         self.us_frame.transform(TEM_C)
         self.us_frame.transform(TW_EM)
         self.vis.update_geometry(self.us_frame)
         self.vis.update_geometry(self.catheter)
+
+        self.previous_transform_us=TW_EM @ TEM_C
 
     
 
