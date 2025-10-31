@@ -37,7 +37,8 @@ class RGBImageVisualizer:
 
         self.cv2_window_height = int(224 * 2.6 * 0.95) 
         self.cv2_window_width = int(self.cv2_window_height * 0.95) 
-        self.cv2_window_x = int(483)
+        # self.cv2_window_x = int(483)
+        self.cv2_window_x = int(510)
         self.cv2_window_y = int(0 )
 
 

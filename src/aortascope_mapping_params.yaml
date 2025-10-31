@@ -5,7 +5,7 @@ savepath : user_has_not_defined
 
 
 # is there an ECG signal?
-gating : 0
+gating : 1
 
 # record or just visualize data?
 record : 0
@@ -14,10 +14,12 @@ save_replay_data: 1
 
 # healthy first return manual segmentation
 tsdf_map : 1
-voxel_size : 0.005
+voxel_size : 0.0035
+# voxel_size : 0.006
 
 
-conf_threshold: 0.92  # lower is better for animals where branch segmentation is less certain
+conf_threshold: 0.995  # lower is better for animals where branch segmentation is less certain
+# conf_threshold: 0.30 # lower is better for animals where branch segmentation is less certain
 
 # ML segmentation
 deeplumen_on : 1
@@ -31,8 +33,11 @@ deeplumen_on : 1
 
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/k_phantom_models_from_scratch/weights.weights.h5
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/hybrid_cnn_imbalanced_full/weights.weights.h5
-model_path: /home/tdillon/segmentation/deepivus_trained_models/temp_cbam_model/weights.weights.h5
-# model_path: /home/tdillon/segmentation/deepivus_trained_models/temp_cbam_model/MLDRN_large_CBAM.keras'
+# model_path: /home/tdillon/segmentation/deepivus_trained_models/temp_cbam_model/weights.weights.h5
+# model_path: /home/tdillon/segmentation/deepivus_trained_models/best_cbam_model/weights.weights.h5
+# model_path: /home/tdillon/segmentation/deepivus_trained_models/cbam_11_phantoms/weights.weights.h5
+model_path: /home/tdillon/segmentation/deepivus_trained_models/cbam_12_phantoms_best_dice/weights.weights.h5
+
 
 
 
@@ -71,11 +76,12 @@ steerable: 0
 
 # double_display: 1
 double_display: 1
-test_image: 1
+test_image: 0 # for offline processing
 test_transform: 0
 machine: philips
 
-figure_mapping: 0
+# figure_mapping: 1
+figure_mapping: 1
 
 
 

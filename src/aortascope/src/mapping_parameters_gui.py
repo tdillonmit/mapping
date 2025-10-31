@@ -22,6 +22,7 @@ funsr_complete_pub       = rospy.Publisher('/funsr_complete', Bool, queue_size=1
 registration_started_pub = rospy.Publisher('/registration_started', Bool, queue_size=1)
 registration_done_pub    = rospy.Publisher('/registration_done', Bool, queue_size=1)
 global_pause_pub         = rospy.Publisher('/global_pause', Bool, queue_size=1)
+motion_capture_pub       = rospy.Publisher('/motion_capture', Bool, queue_size=1)
 switch_probe_pub         = rospy.Publisher('/switch_probe', Bool, queue_size=1)
 refine_started_pub       = rospy.Publisher('/refine_started', Bool, queue_size=1)
 refine_done_pub          = rospy.Publisher('/refine_done', Bool, queue_size=1)
@@ -82,7 +83,7 @@ def start_record():
 
 def save_data():
     save_data_pub.publish(True)
-    pullback_pub.publish(1)
+    pullback_pub.publish(0)
 
 def call_gating():
     gate_pub.publish(True)
@@ -130,7 +131,7 @@ def call_funsr():
 def load_previous_surface_geometry():
     funsr_complete_pub.publish(True)
 
-def call_register():
+def call_register(notify_mapping=1):
     registration_started_pub.publish(True)
 
     #complete this function
@@ -150,9 +151,66 @@ def call_register():
 
     call_registration_indirectly(dataset, visualize, refine, 0)
 
-    registration_done_pub.publish(True)
+    print("finished indirect call!")
 
+    if(notify_mapping==1):
+        registration_done_pub.publish(True)
+
+# FULL MOTION CAPTURE PIPELINE AUTOMATED FOR USER
 def call_motion_capture():
+
+    # bin 3 folder path
+    folder_path = rospy.get_param('dataset', 0)
+    bin_3_folder_path = folder_path+'/gated/bin_3'
+
+    # do gating here first
+    call_gating()
+
+    
+    rospy.set_param("dataset", bin_3_folder_path)
+    folder_prompt.config(text=f"{bin_3_folder_path}")  # Update label with the selected folder
+
+    # start the replay of bin 3
+    replay_pub.publish(True)
+    time.sleep(2) # give mapping a chance to register we've pressed the button
+    replay_pub.publish(False)
+
+    # check to see if bin 3 is finished mapping
+    replay_done = rospy.get_param('replay_done', 0)
+    while(replay_done !=1):
+        print("looping bin 3")
+        time.sleep(1)
+        replay_done = rospy.get_param('replay_done', 0)
+    
+    print("bin 3 complete, starting bin 8! ")
+
+    # bin 8 folder path
+    bin_8_folder_path = folder_path+'/gated/bin_8'
+    rospy.set_param("dataset", bin_8_folder_path)
+    folder_prompt.config(text=f"{bin_8_folder_path}")  # Update label with the selected folder
+
+    # start bin 8 folder path
+    replay_pub.publish(True)
+    time.sleep(2) # give mapping a chance to register we've pressed the button
+    replay_pub.publish(False)
+
+    # check to see if bin 8 is finished mapping
+    replay_done = rospy.get_param('replay_done', 0)
+    while(replay_done !=1):
+        print("looping bin 8")
+        time.sleep(1)
+        replay_done = rospy.get_param('replay_done', 0)
+
+    # motion_capture_pub.publish(True)
+    print("Registering CT mesh to bin 3 (can change to bin 8 with code tweaks)")
+    rospy.set_param("dataset", bin_3_folder_path)
+    call_register(notify_mapping=0)
+
+    rospy.set_param("dataset", folder_path) # go back to high level folder
+
+    print("initializing motion capture...")
+     
+    
 
     cardiac_pub.publish(True)
 
@@ -170,6 +228,17 @@ def call_motion_capture():
 
     initialize_motion_capture_indirectly(dataset, visualize)
 
+    bin_3_folder_path = folder_path+'/gated/bin_3'
+    rospy.set_param("dataset", bin_3_folder_path)
+    folder_prompt.config(text=f"{bin_3_folder_path}")  # Update label with the selected folder
+
+    print("Finished!")
+
+    
+    # motion_capture_pub.publish(False) 
+
+    registration_done_pub.publish(True)
+
 
 
 
@@ -178,6 +247,7 @@ def load_previous_registration():
 
 def switch_probe():
     switch_probe_pub.publish(True)
+    # switch_probe_pub.publish(False)
 
 def call_refine():
     print("publishing refine start")
@@ -278,7 +348,8 @@ try:
     print("gui double display is", double_display)
     if(double_display == 1):
         display_scale_factor =0.5
-        root.geometry("410x527+0+0")
+        # root.geometry("410x527+0+0")
+        root.geometry("437x527+0+0")
         
 
     else:
@@ -306,7 +377,8 @@ try:
     button_width = int(30 )  # Button width (characters)
     button_height = int(0.8 )  # Button height (lines)
     padding_y = int(14 * display_scale_factor * 0.4)
-    padding_x = int(105 * display_scale_factor)
+    # padding_x = int(105 * display_scale_factor)
+    padding_x = int(119 * display_scale_factor)
 
     button_font = ("Arial", standard_font_size)  # Font size 14
 
@@ -334,27 +406,27 @@ try:
     # funsr_button = Button(root, text="Initialize Registration", font=button_font, width=button_width, height=button_height, command = call_funsr)
     # funsr_button.grid(row=6, column=0, padx=padding_x, pady=padding_y)
 
-    # load_button = Button(root, text="Load Previous Initialization", font=button_font, width=button_width, height=button_height, command = load_previous_surface_geometry)
-    # load_button.grid(row=7, column=0, padx=padding_x, pady=padding_y)
-
     funsr_button = Button(root, text="Perform Gating", font=button_font, width=button_width, height=button_height, command = call_gating)
     funsr_button.grid(row=6, column=0, padx=padding_x, pady=padding_y)
 
     load_button = Button(root, text="Replay Dataset", font=button_font, width=button_width, height=button_height, command = call_replay)
     load_button.grid(row=7, column=0, padx=padding_x, pady=padding_y)
 
-    register_button = Button(root, text="Register Preoperative Scan", font=button_font, width=button_width, height=button_height, command = call_register)
+    register_button = Button(root, text="3D Preop CT Registration", font=button_font, width=button_width, height=button_height, command = call_register)
     register_button.grid(row=8, column=0, padx=padding_x, pady=padding_y)
 
     # checkbox_var = BooleanVar()
     # checkbox = Checkbutton(root, text="Debug", variable=checkbox_var)
     # checkbox.grid(row=8, column=1,  columnspan=2, padx=0, pady=0)
 
+    sim_device = Button(root, text="4D Preop CT Registration", font=button_font, width=button_width, height=button_height, command = call_motion_capture)
+    sim_device.grid(row=9, column=0, padx=padding_x, pady=padding_y)
+
     load_register = Button(root, text="Load Previously Registered Scan", font=button_font, width=button_width, height=button_height, command = load_previous_registration)
-    load_register.grid(row=9, column=0, padx=padding_x, pady=padding_y)
+    load_register.grid(row=10, column=0, padx=padding_x, pady=padding_y)
 
     tracking_button = Button(root, text="Switch Endoscopic View", font=button_font, width=button_width, height=button_height, command =switch_probe)
-    tracking_button.grid(row=10, column=0, padx=padding_x, pady=padding_y)
+    tracking_button.grid(row=11, column=0, padx=padding_x, pady=padding_y)
 
     # target_button = Button(root, text="Switch Target Vessel", font=button_font, width=button_width, height=button_height, command = switch_vessel)
     # target_button.grid(row=11, column=0, padx=padding_x, pady=padding_y)
@@ -369,8 +441,7 @@ try:
     # quit_button.grid(row=13, column=0, padx=padding_x, pady=padding_y)
 
     
-    sim_device = Button(root, text="Initialize Cardiac Motion", font=button_font, width=button_width, height=button_height, command = call_motion_capture)
-    sim_device.grid(row=11, column=0, padx=padding_x, pady=padding_y)
+    
 
     sim_device = Button(root, text="Load IVUS Mesh Only", font=button_font, width=button_width, height=button_height, command = load_previous_surface_geometry)
     sim_device.grid(row=12, column=0, padx=padding_x, pady=padding_y)
