@@ -3,6 +3,7 @@ from sensor_msgs.msg import Image
 import numpy as np
 import cv2
 import subprocess
+from std_msgs.msg import Int32MultiArray
 
 # aortascope gui functions
 def get_window_id(window_name):
@@ -24,12 +25,24 @@ def bring_window_to_front(window_id):
     if window_id:
         subprocess.run(['wmctrl', '-i', '-r', window_id, '-b', 'add,above'])
 
+def mouse_callback(event, x, y, flags, param):
+    if event == cv2.EVENT_LBUTTONDOWN:   # left mouse click
+        # print(f"Clicked at: ({x}, {y})")
+        msg = Int32MultiArray()
+        msg.data = [x, y]
+        param.publish(msg)
+        print(f"Published pixel: {msg.data}")
+        # clicked_points.append((x, y))
+
+    # publish the clicked pixel
+
 class RGBImageVisualizer:
     def __init__(self):
         rospy.init_node('rgb_image_visualizer')
 
         # Subscribe to the binary image topic
         self.rgb_image_sub = rospy.Subscriber('/rgb_image', Image, self.rgb_image_callback)
+        self.pixel_pub = rospy.Publisher('/evar_click', Int32MultiArray, queue_size=10)
 
         # change to 1 for single display
         display_scale_factor = 1
@@ -75,6 +88,14 @@ class RGBImageVisualizer:
         self.logo_h, self.logo_w = new_h, new_w
 
 
+        # initialize the opencv window
+        
+        # cv2.waitKey(1) 
+        
+
+        print("IVUS image initialized")
+
+
 
     def rgb_image_callback(self, msg):
         # # Extract image data
@@ -116,6 +137,8 @@ class RGBImageVisualizer:
         # disp[0:self.logo_h, 0:self.logo_w] = self.logo_bgr
 
         # show
+        cv2.namedWindow("IVUS Image") # when i include this line, the window no longer shows!
+        cv2.setMouseCallback("IVUS Image", mouse_callback, param = self.pixel_pub)
         cv2.imshow("IVUS Image", disp)
         cv2.moveWindow("IVUS Image", self.cv2_window_x, self.cv2_window_y)
         cv2.waitKey(10)

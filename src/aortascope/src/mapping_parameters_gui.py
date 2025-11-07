@@ -276,6 +276,15 @@ def save_refine():
 def sim_device_deployment():
     sim_device_pub.publish(True)
 
+def toggle_fenestrate():
+    fenestrate = rospy.get_param("fenestrate", 0)
+    if(fenestrate==1):
+        fenestrate=0
+    if(fenestrate==0):
+        fenestrate=1
+    rospy.set_param("fenestrate", fenestrate)
+    print("fenestration mode toggled")
+
 def on_closing():
     shutdown_pub.publish(True)
     root.quit()
@@ -328,6 +337,8 @@ try:
 
     # Initialize rospy without creating a node
     rospy.init_node('mapping_parameters_gui', anonymous=True)
+
+    rospy.set_param("fenestrate", 0)
 
     # pullback_pub.publish(0)
 
@@ -446,8 +457,11 @@ try:
     sim_device = Button(root, text="Load IVUS Mesh Only", font=button_font, width=button_width, height=button_height, command = load_previous_surface_geometry)
     sim_device.grid(row=12, column=0, padx=padding_x, pady=padding_y)
 
-    sim_device = Button(root, text="Simulate Device Deployment", font=button_font, width=button_width, height=button_height, command = sim_device_deployment)
-    sim_device.grid(row=13, column=0, padx=padding_x, pady=padding_y)
+    # sim_device = Button(root, text="Simulate Device Deployment", font=button_font, width=button_width, height=button_height, command = sim_device_deployment)
+    # sim_device.grid(row=13, column=0, padx=padding_x, pady=padding_y)
+
+    fenestrate_graft = Button(root, text="Fenestrate Graft", font=button_font, width=button_width, height=button_height, command = toggle_fenestrate)
+    fenestrate_graft.grid(row=13, column=0, padx=padding_x, pady=padding_y)
 
 
     # PROGRESS BAR AND PERCENTAGE
