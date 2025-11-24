@@ -1,0 +1,39 @@
+/angle: 5.3
+/ascension_node/base_frame_id: ascension_origin
+/ascension_node/product_id: trakstar
+/ascension_node/root_frame_id: ascension_origin
+/ascension_node/target_frame_ids:
+- target1
+- target2
+/oclock: 1.77
+/radial_offset: 0.00235
+/rosdistro: 'noetic
+
+  '
+/roslaunch/uris/host_tdillon_thinkpad_p1_gen_5__45701: http://tdillon-ThinkPad-P1-Gen-5:45701/
+/rosversion: '1.16.0
+
+  '
+/run_id: af055f46-bf3f-11f0-8a3a-03c2d5a901f2
+/scaling: 7.65e-05
+/threshold: 100
+/translation: 0.011
+/usb_cam/framerate: 40
+/usb_cam/image_height: 1024
+/usb_cam/image_raw/compressed/format: jpeg
+/usb_cam/image_raw/compressed/jpeg_optimize: false
+/usb_cam/image_raw/compressed/jpeg_progressive: false
+/usb_cam/image_raw/compressed/jpeg_quality: 80
+/usb_cam/image_raw/compressed/jpeg_restart_interval: 0
+/usb_cam/image_raw/compressed/png_level: 9
+/usb_cam/image_raw/compressedDepth/depth_max: 10.0
+/usb_cam/image_raw/compressedDepth/depth_quantization: 100.0
+/usb_cam/image_raw/compressedDepth/format: png
+/usb_cam/image_raw/compressedDepth/png_level: 9
+/usb_cam/image_raw/theora/keyframe_frequency: 64
+/usb_cam/image_raw/theora/optimize_for: 1
+/usb_cam/image_raw/theora/quality: 31
+/usb_cam/image_raw/theora/target_bitrate: 800000
+/usb_cam/image_width: 1280
+/usb_cam/pixel_format: yuyv
+/usb_cam/video_device: /dev/video-grabber

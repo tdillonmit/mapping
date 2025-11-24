@@ -19,7 +19,7 @@ voxel_size : 0.0035
 
 
 conf_threshold: 0.995  # lower is better for animals where branch segmentation is less certain
-# conf_threshold: 0.30 # lower is better for animals where branch segmentation is less certain
+# conf_threshold: 0.10 # lower is better for animals where branch segmentation is less certain
 
 # ML segmentation
 deeplumen_on : 1
@@ -36,7 +36,8 @@ deeplumen_on : 1
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/temp_cbam_model/weights.weights.h5
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/best_cbam_model/weights.weights.h5
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/cbam_11_phantoms/weights.weights.h5
-model_path: /home/tdillon/segmentation/deepivus_trained_models/cbam_12_phantoms_best_dice/weights.weights.h5
+# model_path: /home/tdillon/segmentation/deepivus_trained_models/cbam_12_phantoms_best_dice/weights.weights.h5
+model_path: /home/tdillon/segmentation/deepivus_trained_models/cbam_13_phantoms/weights.weights.h5
 
 
 
@@ -59,6 +60,7 @@ deeplumen_valve_on: 0
 model_path_cusps: /home/tdillon/segmentation/deepivus_trained_models/eve_train_2/weights.weights.h5
 
 # mapping visualization parameters
+endoanchor: 0
 vpC_map: 1
 bpC_map: 0
 extend: 0
@@ -84,7 +86,8 @@ machine: philips
 figure_mapping: 1
 
 
-
+load_evar_graft: 0
+show_evar_wireframe: 0
 
 
 

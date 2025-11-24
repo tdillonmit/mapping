@@ -254,24 +254,27 @@ def call_refine():
     refine_start_pub.publish(True)
 
 def save_refine():
+
+    # Publish that refinement is starting
+    refine_done_pub.publish(True)
     
 
 
     # Get dataset path
-    dataset = rospy.get_param('dataset', 0)
-    if dataset == 0:
-        select_folder()
-    dataset = rospy.get_param('dataset', 0)
+    # dataset = rospy.get_param('dataset', 0)
+    # if dataset == 0:
+    #     select_folder()
+    # dataset = rospy.get_param('dataset', 0)
 
-    visualize = 0
-    refine = 1
+    # visualize = 0
+    # refine = 1
 
-    print("calling refine indirectly")
-    call_refine_indirectly(dataset, visualize, refine)
+    # print("calling refine indirectly")
+    # call_refine_indirectly(dataset, visualize, refine)
 
   
     # Publish that refinement is starting
-    refine_done_pub.publish(True)
+    # refine_done_pub.publish(True)
 
 def sim_device_deployment():
     sim_device_pub.publish(True)
@@ -404,11 +407,17 @@ try:
     record_button = Button(root, text="Start Recording", font=button_font, width=button_width, height=button_height, command=start_record)
     record_button.grid(row=2, column=0, padx=padding_x, pady=padding_y)
 
-    start_button = Button(root, text="Start Pullback Device", font=button_font, width=button_width, height=button_height, command=start_pullback)
-    start_button.grid(row=3, column=0, padx=padding_x, pady=padding_y)
+    # start_button = Button(root, text="Start Pullback Device", font=button_font, width=button_width, height=button_height, command=start_pullback)
+    # start_button.grid(row=3, column=0, padx=padding_x, pady=padding_y)
 
-    stop_button = Button(root, text="Stop Pullback Device", font=button_font, width=button_width, height=button_height, command=stop_pullback)
-    stop_button.grid(row=4, column=0, padx=padding_x, pady=padding_y)
+    # stop_button = Button(root, text="Stop Pullback Device", font=button_font, width=button_width, height=button_height, command=stop_pullback)
+    # stop_button.grid(row=4, column=0, padx=padding_x, pady=padding_y)
+
+    refine_button = Button(root, text="Map EVAR Graft (Start)", font=button_font, width=button_width, height=button_height, command = call_refine)
+    refine_button.grid(row=3, column=0, padx=padding_x, pady=padding_y)
+
+    refine_stop_button = Button(root, text="Map EVAR Graft (Stop)", font=button_font, width=button_width, height=button_height, command = save_refine)
+    refine_stop_button.grid(row=4, column=0, padx=padding_x, pady=padding_y)
 
     save_data_button = Button(root, text="Save Data", font=button_font, width=button_width, height=button_height, command=save_data)
     save_data_button.grid(row=5, column=0, padx=padding_x, pady=padding_y)
@@ -430,8 +439,8 @@ try:
     # checkbox = Checkbutton(root, text="Debug", variable=checkbox_var)
     # checkbox.grid(row=8, column=1,  columnspan=2, padx=0, pady=0)
 
-    sim_device = Button(root, text="4D Preop CT Registration", font=button_font, width=button_width, height=button_height, command = call_motion_capture)
-    sim_device.grid(row=9, column=0, padx=padding_x, pady=padding_y)
+    # sim_device = Button(root, text="4D Preop CT Registration", font=button_font, width=button_width, height=button_height, command = call_motion_capture)
+    # sim_device.grid(row=9, column=0, padx=padding_x, pady=padding_y)
 
     load_register = Button(root, text="Load Previously Registered Scan", font=button_font, width=button_width, height=button_height, command = load_previous_registration)
     load_register.grid(row=10, column=0, padx=padding_x, pady=padding_y)
@@ -447,6 +456,8 @@ try:
 
     # refine_stop_button = Button(root, text="Refine Abdominal Registration (Stop)", font=button_font, width=button_width, height=button_height, command = save_refine)
     # refine_stop_button.grid(row=12, column=0, padx=padding_x, pady=padding_y)
+
+    
 
     # quit_button = Button(root, text="Quit Application", font=button_font, width=button_width, height=button_height, command = quit_aortascope)
     # quit_button.grid(row=13, column=0, padx=padding_x, pady=padding_y)

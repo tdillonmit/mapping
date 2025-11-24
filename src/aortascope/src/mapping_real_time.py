@@ -207,9 +207,11 @@ class PointCloudUpdater:
         self.tracker.compute_vertex_normals()
         self.tracker.paint_uniform_color([1,0.5,0])
 
-        self.catheter = o3d.geometry.TriangleMesh.create_cylinder(radius=0.0015, height=0.01)
+        # self.catheter = o3d.geometry.TriangleMesh.create_cylinder(radius=0.0015, height=0.01)
+        self.catheter = o3d.geometry.TriangleMesh.create_cylinder(radius=0.0015, height=0.007)
         self.catheter.compute_vertex_normals()
         self.catheter.paint_uniform_color([0,0,1])
+        # self.catheter.paint_uniform_color([1,0,0])
 
         self.guidewire_cylinder = o3d.geometry.TriangleMesh.create_cylinder(radius=0.000225, height=0.004)
         self.guidewire_cylinder.compute_vertex_normals()
@@ -225,10 +227,12 @@ class PointCloudUpdater:
         self.guidewire_pointcloud = o3d.geometry.PointCloud()
 
         self.bending_segment = o3d.geometry.TriangleMesh()
-        self.bending_segment.paint_uniform_color([0.678, 0.847, 0.902])
+        self.bending_segment_color = [0.678, 0.847, 0.902]
+        self.bending_segment.paint_uniform_color(self.bending_segment_color)
         # self.steerable_arc_length = 0.015
         # self.steerable_arc_length = 0.027
-        self.steerable_arc_length = 0.028
+        # self.steerable_arc_length = 0.028  # aptus tourguide
+        self.steerable_arc_length = 0.028 # aptus endoanchor and tourguide
 
         self.catheter_base_frame = o3d.geometry.TriangleMesh.create_coordinate_frame()
         self.catheter_base_frame .scale(self.frame_scaling,center=[0,0,0])
@@ -501,7 +505,7 @@ class PointCloudUpdater:
         # initialize endoscopic view on the target probe
         # setup subscribers and publishers
         # do this at the bottom
-        self.image_sub = rospy.Subscriber('/usb_cam/image_raw', Image, self.image_callback)
+        self.image_sub = rospy.Subscriber('/usb_cam/image_raw', Image, self.image_callback, queue_size=1)
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
@@ -511,7 +515,7 @@ class PointCloudUpdater:
 
         if(self.gating ==1):
             # self.lock = threading.Lock()  # A lock to ensure thread safety
-            self.ecg_sub = rospy.Subscriber('ecg', Int32, self.ecg_callback)
+            self.ecg_sub = rospy.Subscriber('ecg', Int32, self.ecg_callback, queue_size=1)
             
         self.rgb_image_pub = rospy.Publisher('/rgb_image', Image, queue_size=1)
 
@@ -680,7 +684,7 @@ class PointCloudUpdater:
         self.clicked_pixel = np.asarray(self.clicked_pixel).astype(int)
         print(f"Received pixel: x={x}, y={y}")
 
-        # for now set fenestrate to 0 - make this a button later
+
         self.fenestrate = rospy.get_param('fenestrate', 0)
 
         clicked_point = get_single_point_cloud_from_pixels(
@@ -700,6 +704,8 @@ class PointCloudUpdater:
         # for EVAR positioning
         closest_point, placeholder_1, placeholder_2 = find_closest_interpolated_values_on_centerline(clicked_point, self.aortic_centreline, self.GD_centreline)
 
+        self.evar_loft_sim = 0 # not doing live updating
+
         if(self.fenestrate==0):
                
             
@@ -708,13 +714,13 @@ class PointCloudUpdater:
             self.clicked_extrinsic[:3,3] = clicked_point
             self.clicked_extrinsic[:3,1] = (clicked_point - closest_point ) / np.linalg.norm(clicked_point - closest_point )
 
-            self.evar_loft_sim = 1
+            
 
             
         if(self.fenestrate==1):
             # punch out holes based on more clicked points
-            bead_distance = 0.005
-            absolute_position, radial_vector = convert_clicked_point_to_fen_center(self.clicked_point, closest_point, self.aortic_centreline, self.GD_centreline, bead_distance )
+            bead_distance = 0.005  # change this as needed
+            absolute_position, radial_vector = convert_clicked_point_to_fen_center(clicked_point, closest_point, self.aortic_centreline, self.GD_centreline, bead_distance, self.evar_radius )
             self.absolute_positions.append(absolute_position)
             self.radial_vectors.append(radial_vector)
 
@@ -722,8 +728,8 @@ class PointCloudUpdater:
 
         self.fen_distances = None # overriding any manually written fen locations
         self.fen_angles = None
-        current_evar = predict_deploy(self.clicked_extrinsic, self.aortic_centreline,self.lofted_cylinder,self.strut_geometry,self.strut_distances,self.evar_length, self.centreline_transforms, self.GD_centreline,self.evar_radius, self.fen_distances, self.fen_angles, self.absolute_positions, self.radial_vectors, fenestration_mode='abs')
-            
+        current_evar  = predict_deploy(self.clicked_extrinsic, self.aortic_centreline,self.lofted_cylinder,self.strut_geometry,self.strut_distances,self.evar_length, self.centreline_transforms, self.GD_centreline,self.evar_radius, self.fen_distances, self.fen_angles, self.absolute_positions, self.radial_vectors, fenestration_mode='abs')
+        evar_struts_and_rings, evar_wireframe = predict_deploy_wireframe(self.clicked_extrinsic, self.aortic_centreline,self.lofted_cylinder,self.strut_geometry,self.strut_distances,self.evar_length, self.centreline_transforms, self.GD_centreline,self.evar_radius, self.fen_distances, self.fen_angles, self.absolute_positions, self.radial_vectors, fenestration_mode='abs')
 
         self.evar_graft.vertices = current_evar.vertices
         self.evar_graft.triangles = current_evar.triangles
@@ -732,6 +738,55 @@ class PointCloudUpdater:
         
         self.vis.update_geometry(self.evar_graft)
         self.vis2.update_geometry(self.evar_graft)
+
+        if(self.show_evar_wireframe==1):
+
+            self.evar_wireframe.points = evar_wireframe.points
+            self.evar_wireframe.lines = evar_wireframe.lines
+            self.evar_wireframe.colors = evar_wireframe.colors
+
+            self.evar_struts_and_rings.vertices = evar_struts_and_rings.vertices
+            self.evar_struts_and_rings.triangles = evar_struts_and_rings.triangles
+            self.evar_struts_and_rings.vertex_colors = evar_struts_and_rings.vertex_colors
+            self.evar_struts_and_rings.compute_vertex_normals()
+
+            self.vis.update_geometry(self.evar_struts_and_rings)
+            self.vis.update_geometry(self.evar_wireframe)
+        else:
+            self.vis.update_geometry(self.evar_graft)
+
+        o3d.io.write_triangle_mesh(self.write_folder  +  "/evar_graft.ply", self.evar_graft)
+        o3d.io.write_triangle_mesh(self.write_folder  +  "/evar_struts_and_rings.ply", self.evar_struts_and_rings)
+        o3d.io.write_line_set(self.write_folder  +  "/evar_wireframe.ply", self.evar_wireframe)
+        
+
+
+    def load_previous_fevar(self):
+
+
+        path = os.path.join(self.write_folder, "evar_graft.ply")
+
+        if os.path.exists(path):
+
+            self.evar_graft = o3d.io.read_triangle_mesh(self.write_folder  +  "/evar_graft.ply")
+
+            # self.vis.add_geometry(self.evar_graft)
+            self.vis2.add_geometry(self.evar_graft)
+
+            if(self.show_evar_wireframe==1):
+                self.evar_struts_and_rings = o3d.io.read_triangle_mesh(self.write_folder  +  "/evar_struts_and_rings.ply")
+                self.evar_wireframe = o3d.io.read_line_set(self.write_folder  +  "/evar_wireframe.ply")
+
+                self.vis.update_geometry(self.evar_struts_and_rings)
+                self.vis.update_geometry(self.evar_wireframe)
+                
+            else:
+                self.vis.add_geometry(self.evar_graft)
+                
+
+            self.fenestrate==1
+
+
 
 
 
@@ -773,6 +828,7 @@ class PointCloudUpdater:
 
             # this makes compilation 20x faster!!
             model = tf.function(model, jit_compile=True)
+            # tf.config.optimizer.set_jit(True)
 
             self.model = model
 
@@ -857,6 +913,8 @@ class PointCloudUpdater:
 
         self.model_path_cusps  = config_yaml['model_path_cusps']
 
+        self.endoanchor = config_yaml['endoanchor']
+
         self.vpC_map = config_yaml['vpC_map']
 
         self.bpC_map = config_yaml['bpC_map']
@@ -896,6 +954,8 @@ class PointCloudUpdater:
         self.machine = config_yaml['machine']
 
         self.figure_mapping = config_yaml['figure_mapping']
+
+        self.load_evar_graft = config_yaml['load_evar_graft']
 
         # ---- LOAD ROS PARAMETERS ------ #
         param_names = ['/angle', '/translation','/scaling','/threshold','/no_points','/crop_index','/radial_offset','/oclock', '/constraint_radius','/pullback']
@@ -1096,12 +1156,12 @@ class PointCloudUpdater:
 
             # grayscale_image=preprocess_ivus_image(grayscale_image, pc_updater.box_crop, pc_updater.circle_crop, pc_updater.text_crop, pc_updater.crosshairs_crop)
 
-            # try:
+            try:
                 # pc_updater.image_callback(grayscale_image, TW_EM, i, model, dataset_name, gating, bin_number, pC_map, esdf_map, tsdf_map, killingfusion_save, dissection_parameterize, esdf_smoothing, certainty_coloring, vpC_map)
-            self.append_image_transform_pair(TW_EM, grayscale_image) #TURN TRY EXCEPT BACK ON
+                self.append_image_transform_pair(TW_EM, grayscale_image) #TURN TRY EXCEPT BACK ON
 
-            # except:
-            #     print("image skipped on replay!")
+            except:
+                print("image skipped on replay!")
 
             # except KeyboardInterrupt:
             #     print("Ctrl+C detected, stopping visualizer...")
@@ -1279,6 +1339,7 @@ class PointCloudUpdater:
         self.tracker = o3d.geometry.TriangleMesh.create_cylinder(radius=0.001, height=0.01, resolution=40)
         self.tracker.compute_vertex_normals()
         self.tracker.paint_uniform_color([1,0.5,0])
+        
 
 
         self.previous_transform=np.eye(4)
@@ -1945,52 +2006,52 @@ class PointCloudUpdater:
             self.registered_ct_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/final_registration_mesh_refine.ply')
 
         # TSDF LOAD MODULES
-        if self.registered_ct_mesh is None or len(self.registered_ct_mesh.vertices) == 0 or len(self.registered_ct_mesh.triangles) == 0:
+        # if self.registered_ct_mesh is None or len(self.registered_ct_mesh.vertices) == 0 or len(self.registered_ct_mesh.triangles) == 0:
 
-            self.ct_centroids = np.load(self.write_folder + '/ivus_centroids.npy')
-            self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.004, 20, [0,1,0])
+        #     self.ct_centroids = np.load(self.write_folder + '/ivus_centroids.npy')
+        #     self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.004, 20, [0,1,0])
 
-            self.registered_ct_lineset.paint_uniform_color([0,0,0])
+        #     self.registered_ct_lineset.paint_uniform_color([0,0,0])
 
-            self.registered_ct_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/tsdf_mesh_near_lumen.ply')
-            self.registered_ct_mesh_2 = copy.deepcopy(self.registered_ct_mesh)
-            self.registered_ct_mesh_2.compute_vertex_normals()
+        #     self.registered_ct_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/tsdf_mesh_near_lumen.ply')
+        #     self.registered_ct_mesh_2 = copy.deepcopy(self.registered_ct_mesh)
+        #     self.registered_ct_mesh_2.compute_vertex_normals()
 
-            # DELETED FOR FEVAR
-            self.vis2.add_geometry(self.ct_spheres)
-            self.registered_ct_mesh_2.paint_uniform_color([1,0,0])
-            self.vis2.add_geometry(self.registered_ct_mesh_2)
-            self.vis2.add_geometry(self.tracker)
+        #     # DELETED FOR FEVAR
+        #     self.vis2.add_geometry(self.ct_spheres)
+        #     self.registered_ct_mesh_2.paint_uniform_color([1,0,0])
+        #     self.vis2.add_geometry(self.registered_ct_mesh_2)
+        #     self.vis2.add_geometry(self.tracker)
 
             
-            # self.vis.remove_geometry(self.catheter)
+        #     # self.vis.remove_geometry(self.catheter)
 
-            self.registered_ct_lineset = create_wireframe_lineset_from_mesh(self.registered_ct_mesh)
-            self.vis.add_geometry(self.registered_ct_lineset)
+        #     self.registered_ct_lineset = create_wireframe_lineset_from_mesh(self.registered_ct_mesh)
+        #     self.vis.add_geometry(self.registered_ct_lineset)
 
-            # DELETED FOR FEVAR
-            # self.vis.add_geometry(self.ct_spheres)
+        #     # DELETED FOR FEVAR
+        #     # self.vis.add_geometry(self.ct_spheres)
 
-            print("LOADING TSDF MESH ONLY!!")
+        #     print("LOADING TSDF MESH ONLY!!")
 
     
-            # Get current camera parameters
-            view_control_1 = self.vis.get_view_control()
+        #     # Get current camera parameters
+        #     view_control_1 = self.vis.get_view_control()
 
-            view_control_1.set_up([0,-1,0])
+        #     view_control_1.set_up([0,-1,0])
 
-            view_control_1.set_front([0,0,-1])
+        #     view_control_1.set_front([0,0,-1])
 
 
 
-            view_control_1.set_zoom(0.25)
+        #     view_control_1.set_zoom(0.25)
 
-            # roll 180 degrees
-            # view_control_1.rotate(180, 0) 
+        #     # roll 180 degrees
+        #     # view_control_1.rotate(180, 0) 
 
 
             
-            return
+        #     return
 
         ct_centroid_pc = o3d.io.read_point_cloud(self.write_folder + '/side_branch_centrelines.ply')
         if(self.refine==1):
@@ -2025,6 +2086,7 @@ class PointCloudUpdater:
         avg_edge_length = 999
         desired_edge_length = 0.002
 
+        print("started subdividing!")
         while avg_edge_length > desired_edge_length:
             self.registered_ct_mesh_2 = self.registered_ct_mesh_2.subdivide_loop(number_of_iterations=1)
             
@@ -2039,7 +2101,10 @@ class PointCloudUpdater:
             avg_edge_length = np.mean(np.concatenate([e0, e1, e2]))
 
         print("subdivision complete, computing coarse to fine mapping!")
+        
         self.knn_idxs, self.knn_weights = precompute_knn_mapping(self.registered_ct_mesh, self.registered_ct_mesh_2, k=3)
+        
+        print("finished knn compute")
         self.coarse_template_vertices = copy.deepcopy(np.asarray(self.registered_ct_mesh.vertices))
         self.fine_template_vertices = copy.deepcopy(np.asarray(self.registered_ct_mesh_2.vertices))
         self.adjacency_matrix = build_adjacency_matrix(self.registered_ct_mesh_2)
@@ -2069,47 +2134,81 @@ class PointCloudUpdater:
 
         self.ct_spheres = o3d.geometry.TriangleMesh()
         for centroid, color in zip(self.ct_centroids,colors):
-            print("centroid", centroid)
-            print("color", color)
             new_sphere = get_sphere_cloud([centroid], 0.00275, 20, [0,1,0])
-            print(new_sphere)
             new_sphere.paint_uniform_color(color)
             self.ct_spheres = self.ct_spheres + new_sphere
 
 
         # ---- RENDER RINGS INSTEAD OF SPHERES (just comment this if prefer spheres) --- #
-        self.ct_centroids = np.load(self.write_folder + '/ct_centroids.npy')
-        side_branch_centrelines_indices = np.load(self.write_folder + '/side_branch_centrelines_indices.npy')
-
-        
-        side_branch_points_grouped = []
-        for check_index in np.unique(side_branch_centrelines_indices):
-            relevant_args = np.argwhere(side_branch_centrelines_indices == check_index)[:,0]
-            relevant_side_branch_centrelines_pc_points = self.constraint_locations[relevant_args,:]
-            side_branch_points_grouped.append(relevant_side_branch_centrelines_pc_points)
-
+        simple_normal=1
         self.ct_spheres = o3d.geometry.TriangleMesh()
-        for centroid, color, relevant_side_branch_centrelines_pc_points  in zip(self.ct_centroids,colors, side_branch_points_grouped):
-            minor_radius = 0.0005
-            # get centroid_pc centreline for each centroid
-            # major_radius = maximal_inscribed_radius(mesh = self.registered_ct_mesh, point = centroid)  # shrink it a little bit so it doesn't overlap mesh
-            major_radius = 0.00325  # shrink it a little bit so it doesn't overlap mesh
-            origin = relevant_side_branch_centrelines_pc_points[2,:]
-            normal = relevant_side_branch_centrelines_pc_points[ 10, :] - origin
-            normal = normal / np.linalg.norm(normal)
-            # torus = create_torus(centroid, normal, major_radius, minor_radius, 30)
-            torus = create_torus(origin, normal, major_radius, minor_radius, 30)
-            torus.paint_uniform_color(color)
-            self.ct_spheres = self.ct_spheres + torus # replace the ct_spheres
+        self.torus_origins = []
+        self.torus_normals = []
+        self.minor_radius = 0.0005
+        self.major_radius = 0.00325  # shrink it a little bit so it doesn't overlap mesh
+        self.aortic_centreline = np.asarray(self.centerline_pc.points)
+
+        if(simple_normal==0):
+            side_branch_centrelines_indices = np.load(self.write_folder + '/side_branch_centrelines_indices.npy')
+ 
+            side_branch_points_grouped = []
+            for check_index in np.unique(side_branch_centrelines_indices):
+                relevant_args = np.argwhere(side_branch_centrelines_indices == check_index)[:,0]
+                relevant_side_branch_centrelines_pc_points = self.constraint_locations[relevant_args,:]
+                side_branch_points_grouped.append(relevant_side_branch_centrelines_pc_points)
+
+            for centroid, color, relevant_side_branch_centrelines_pc_points  in zip(self.ct_centroids,colors, side_branch_points_grouped):
+                
+                # get centroid_pc centreline for each centroid
+                # major_radius = maximal_inscribed_radius(mesh = self.registered_ct_mesh, point = centroid)  # shrink it a little bit so it doesn't overlap mesh
+                
+                origin = relevant_side_branch_centrelines_pc_points[2,:]
+                normal = relevant_side_branch_centrelines_pc_points[ 10, :] - origin
+                normal = normal / np.linalg.norm(normal)
+
+                # torus = create_torus(centroid, normal, major_radius, minor_radius, 30)
+                torus = create_torus(origin, normal, self.major_radius, self.minor_radius, 30)
+                torus.paint_uniform_color(color)
+                self.ct_spheres = self.ct_spheres + torus # replace the ct_spheres
+
+                self.torus_normals.append(normal)
+                self.torus_origins.append(origin)
+
+        if(simple_normal==1):
+            
+            for centroid, color in zip(self.ct_centroids,colors):
+                
+                
+                origin = centroid
+                closest_index = np.argmin(np.linalg.norm(self.aortic_centreline-origin,axis=1))
+                closest_point = self.aortic_centreline[closest_index,:]
+                normal = origin-closest_point
+                normal = normal/np.linalg.norm(normal)
+
+                # torus = create_torus(centroid, normal, major_radius, minor_radius, 30)
+                torus = create_torus(origin, normal, self.major_radius, self.minor_radius, 30)
+                torus.paint_uniform_color(color)
+                self.ct_spheres = self.ct_spheres + torus # replace the ct_spheres
+
+                self.torus_normals.append(normal)
+                self.torus_origins.append(origin)
+
+        # self.vis_2_spheres = o3d.geometry.TriangleMesh()
+        self.vis_2_spheres = copy.deepcopy(self.ct_spheres) #temp for tests
+
+        orig_points = np.asarray(self.ct_spheres.vertices)
+        self.ct_spheres_points = copy.deepcopy(orig_points)
+        self.vis_2_spheres_points = copy.deepcopy(orig_points)
+        self.knn_idxs_spheres, self.knn_weights_spheres = precompute_knn_mapping(self.registered_ct_mesh, self.ct_spheres_points, k=3)
+        self.knn_idxs_spheres_dup, self.knn_weights_spheres_dup = precompute_knn_mapping(self.registered_ct_mesh, self.vis_2_spheres_points, k=3)
+        
         # ---- END OF SPHERE RENDERING ---- #
 
 
-        # self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.00225, 20, [0,1,0])
-        # self.ct_spheres = get_sphere_cloud(self.ct_centroids, 0.004, 20, [0,1,0])
-        self.knn_idxs_spheres, self.knn_weights_spheres = precompute_knn_mapping(self.registered_ct_mesh, self.ct_centroids, k=3)
+        # self.knn_idxs_spheres, self.knn_weights_spheres = precompute_knn_mapping(self.registered_ct_mesh, self.ct_centroids, k=3)  # uncomment this!!
 
 
-        
+
 
     
 
@@ -2133,8 +2232,10 @@ class PointCloudUpdater:
         # flip_mesh_orientation(self.tracker) 
 
         # DELETED FOR FEVAR
-        self.vis2.add_geometry(self.ct_spheres)
+        # self.vis2.add_geometry(self.ct_spheres)
         self.vis.add_geometry(self.ct_spheres)
+        self.vis2.remove_geometry(self.ct_spheres)
+        self.vis2.add_geometry(self.vis_2_spheres)
         self.vis2.add_geometry(self.registered_ct_mesh_2)
         self.vis2.add_geometry(self.tracker)
 
@@ -2194,6 +2295,9 @@ class PointCloudUpdater:
         self.view_control_1 = view_control_1
 
 
+        self.cardiac_initialized=1
+
+
         
 
 
@@ -2210,6 +2314,8 @@ class PointCloudUpdater:
       
     
     def tracking(self):
+
+        self.cardiac_initialized=0
 
         self.write_folder = rospy.get_param('dataset', 0) 
 
@@ -2351,6 +2457,8 @@ class PointCloudUpdater:
             self.load_registetered_ct()
             
 
+        print("finished registering CT mesh")
+
         if(self.live_deformation == 1 or self.cardiac_deformation ==1):
             self.constraint_radius=self.default_values['/constraint_radius'] 
 
@@ -2385,12 +2493,13 @@ class PointCloudUpdater:
             # constraint_seeds = get_sphere_cloud(self.constraint_locations, 0.0025, 12, [0,0,1])
             # o3d.visualization.draw_geometries([test_pc, self.registered_ct_lineset, constraint_seeds])
 
+        
 
         if(self.cardiac_deformation==1):
 
             # uncomment if crashes quicker
-            self.vertices_before = copy.deepcopy(np.asarray(self.ct_spheres.vertices))
-            self.knn_idxs_spheres, self.knn_weights_spheres = precompute_knn_mapping(self.registered_ct_mesh, self.vertices_before, k=3)
+            # self.vertices_before = copy.deepcopy(np.asarray(self.ct_spheres.vertices))
+            # self.knn_idxs_spheres, self.knn_weights_spheres = precompute_knn_mapping(self.registered_ct_mesh, self.vertices_before, k=3)
 
             # get the ecg calibration
             t_start = rospy.Time.now()
@@ -2494,8 +2603,57 @@ class PointCloudUpdater:
         self.vis2.update_renderer()
 
         # remove this in future
-        self.simulate_device()
+        # self.simulate_device()
         self.evar_loft_sim = 0
+
+        self.catheter_radius = 0.0015
+
+        # integrated IVUS and steering
+        if(self.endoanchor==1):
+            self.vpC_map = 1
+            self.vis.add_geometry(self.volumetric_near_point_cloud)
+            self.vis.add_geometry(self.volumetric_far_point_cloud)
+            self.vis.add_geometry(self.simple_far_pc)
+            self.catheter_radius = 0.0025
+            self.bending_segment_color = [0.2, 0.2, 1.0]
+            
+
+            self.catheter.paint_uniform_color([1,0.5,0])
+            self.vis.add_geometry(self.catheter)
+
+            self.vis2.add_geometry(self.catheter) # viewing from ivus probe now
+            self.vis2.remove_geometry(self.tracker)
+
+            #true location of shaft not being represented, but true location of IVUS is
+            self.vis.remove_geometry(self.tracker)
+
+
+
+            # LOAD THE ENDOANCHOR CALIBRATION SO DON'T GET MIXED UP
+            with open('/home/tdillon/mapping/src/calibration_parameters_endoanchor.yaml', 'r') as file:
+                self.calib_yaml = yaml.safe_load(file)
+
+            self.angle = self.calib_yaml['/angle']
+            self.translation = self.calib_yaml['/translation']
+            self.radial_offset = self.calib_yaml['/radial_offset']
+            self.o_clock = self.calib_yaml['/oclock']
+
+
+
+            self.deeplumen_on = 1
+            self.deeplumen_slim_on = 0
+            self.deeplumen_lstm_on = 0
+
+            print("endoanchor active")
+
+        flip_mesh_orientation(self.tracker) 
+
+        if(self.load_evar_graft==1):
+            self.load_previous_fevar()
+
+            
+            
+            
   
 
             
@@ -2520,6 +2678,7 @@ class PointCloudUpdater:
             self.deeplumen_slim_on = 0
             self.deeplumen_lstm_on = 0
 
+
             self.vis.remove_geometry(self.catheter)
             # self.vis.remove_geometry(self.tracker_frame) # use this and catheter base frame to make sure you're getting reasonable instrument tracking
 
@@ -2540,12 +2699,14 @@ class PointCloudUpdater:
 
     def refine_record(self):
 
+        # setting this to EVAR record instead
+
 
         self.refine=1
         self.extend=1
         self.tsdf_map =1
         self.vpC_map = 1
-        self.orifice_center_map = 1
+        self.orifice_center_map = 0
 
         
 
@@ -2565,15 +2726,18 @@ class PointCloudUpdater:
 
         self.volumetric_near_point_cloud = o3d.geometry.PointCloud()
         self.volumetric_far_point_cloud = o3d.geometry.PointCloud()
-        self.vis.add_geometry(self.volumetric_near_point_cloud)
-        self.vis.add_geometry(self.volumetric_far_point_cloud)
+
+        # self.vis.add_geometry(self.volumetric_near_point_cloud)
+        # self.vis.add_geometry(self.volumetric_far_point_cloud)  # removed for EVAR record
 
         
 
         # self.vis.add_geometry(self.orifice_center_point_cloud)
 
-        self.orifice_center_spheres = o3d.geometry.TriangleMesh()
-        self.vis.add_geometry(self.orifice_center_spheres)
+
+        
+        # self.orifice_center_spheres = o3d.geometry.TriangleMesh()
+        # self.vis.add_geometry(self.orifice_center_spheres)
 
         
         
@@ -2688,7 +2852,15 @@ class PointCloudUpdater:
 
             self.lofted_cylinder = o3d.t.geometry.TriangleMesh.from_legacy(self.lofted_cylinder)
             self.evar_graft = o3d.geometry.TriangleMesh()
-            self.vis.add_geometry(self.evar_graft)
+
+            self.evar_wireframe = o3d.geometry.LineSet()
+            self.evar_struts_and_rings = o3d.geometry.LineSet()
+
+            if(self.show_evar_wireframe==1):
+                self.vis.add_geometry(self.evar_struts_and_rings)
+                self.vis.add_geometry(self.evar_wireframe)
+            else:
+                self.vis.add_geometry(self.evar_graft)
 
             # FOR FEVAR NAVIGATION
             self.vis2.add_geometry(self.evar_graft)
@@ -2763,7 +2935,7 @@ class PointCloudUpdater:
         self.ecg_buffer.append(self.ecg_latest)
 
         
-        if(self.cardiac_deformation==1):
+        if(self.cardiac_deformation==1 and self.cardiac_initialized==1):
             # if(self.animal==1):
             #     if (self.ecg_latest < self.ecg_threshold) and (self.ecg_previous >= self.ecg_threshold) and self.ecg_state==1 and (rospy.Time.now().to_sec() - self.previous_peak > 0.1):
 
@@ -2804,6 +2976,16 @@ class PointCloudUpdater:
         if delta < rospy.Duration(0.02):  # max ~50 Hz
             print("throttling to cool CPU!")
             return
+
+
+        # if(self.endoanchor!=1):
+        #     if delta < rospy.Duration(0.02):  # max ~50 Hz
+        #         print("throttling!")
+        #         return
+        # else:
+        #     if delta < rospy.Duration(0.0427):  # max 20 Hz - Nyquist for 11.7 Hz
+        #         # print("skipping!")
+        #         return
 
         
             
@@ -3130,7 +3312,7 @@ class PointCloudUpdater:
        
 
         # first return segmentation
-        if(self.deeplumen_on == 0 and self.deeplumen_slim_on == 0 and self.deeplumen_lstm_on == 0 and self.dest_frame== 'target1'):
+        if(self.deeplumen_on == 0 and self.deeplumen_slim_on == 0 and self.deeplumen_lstm_on == 0 and self.dest_frame== 'target1' and self.endoanchor!=1):
 
             relevant_pixels=first_return_segmentation(grayscale_image,threshold, crop_index,self.gridlines)
             relevant_pixels=np.asarray(relevant_pixels).squeeze()
@@ -3180,13 +3362,16 @@ class PointCloudUpdater:
 
             
 
-        if((self.deeplumen_on == 1 or (self.deeplumen_slim_on == 1 or self.deeplumen_lstm_on == 1)) and self.dest_frame=='target1'):
+        # if((self.deeplumen_on == 1 or (self.deeplumen_slim_on == 1 or self.deeplumen_lstm_on == 1)) and self.dest_frame=='target1'):
 
-            if(self.deeplumen_on == 1 or self.deeplumen_slim_on == 1):
+        if(((self.deeplumen_on == 1 or (self.deeplumen_slim_on == 1 or self.deeplumen_lstm_on == 1)) and self.dest_frame=='target1') or self.endoanchor==1):
+
+            
+
+            if(self.deeplumen_on == 1 or self.deeplumen_slim_on == 1 or self.endoanchor == 1):
             
                 # FOR DISSECTION IMPLEMENTATION LATER
-
-            
+                
 
                 # # note 224,224 image for compatibility with network is hardcoded
                 grayscale_image = cv2.resize(grayscale_image, (224, 224))
@@ -3441,7 +3626,7 @@ class PointCloudUpdater:
                         else:
                             
 
-                            print("no overlap")
+                            # print("no overlap")
                             # no overlap at all → new branch
                             
                             self.branch_pass = self.branch_pass + 1
@@ -3469,7 +3654,7 @@ class PointCloudUpdater:
 
                         if(np.count_nonzero(component_mask) < 0.66 * max_branch_pass_area):
                             branch_pass_trigger = 1
-                            print("triggered!")
+                            # print("triggered!")
                             
                         
                         else:
@@ -3491,7 +3676,7 @@ class PointCloudUpdater:
 
                             branch_pass_trigger = 0
 
-                            print("detected rise!")
+                            # print("detected rise!")
 
                         # END OF AREA DIP LOGIC
 
@@ -3599,21 +3784,21 @@ class PointCloudUpdater:
 
 
         # FOT INTEGRATED IVUS AND STEERING GET RID OF THIS!
-        if(self.dest_frame=='target2'):
-            mask_1 = np.zeros_like(grayscale_image)
-            mask_2 = np.zeros_like(grayscale_image)
+        # if(self.dest_frame=='target2'):
+        #     mask_1 = np.zeros_like(grayscale_image)
+        #     mask_2 = np.zeros_like(grayscale_image)
 
-            original_image = cv2.cvtColor(original_image, cv2.COLOR_GRAY2BGR)
-            rgb_image_msg = Image(
-                # header=header,
-                height=np.shape(original_image)[0],
-                width=np.shape(original_image)[1],
-                encoding='rgb8',
-                is_bigendian=False,
-                step=np.shape(original_image)[1] * 3,
-                data=original_image.tobytes()
-            )
-            self.rgb_image_pub.publish(rgb_image_msg)
+        #     original_image = cv2.cvtColor(original_image, cv2.COLOR_GRAY2BGR)
+        #     rgb_image_msg = Image(
+        #         # header=header,
+        #         height=np.shape(original_image)[0],
+        #         width=np.shape(original_image)[1],
+        #         encoding='rgb8',
+        #         is_bigendian=False,
+        #         step=np.shape(original_image)[1] * 3,
+        #         data=original_image.tobytes()
+        #     )
+        #     self.rgb_image_pub.publish(rgb_image_msg)
 
 
 
@@ -3773,9 +3958,9 @@ class PointCloudUpdater:
                  
                         self.mesh_near_lumen_lineset.points = temp_lineset.points
                         self.mesh_near_lumen_lineset.lines = temp_lineset.lines
-                        # if(self.refine==1):
-                        #     # self.mesh_near_lumen_lineset.paint_uniform_color([0,1,0])
-                        #     self.mesh_n
+                        if(self.refine==1):
+                            self.mesh_near_lumen_lineset.paint_uniform_color([0.1, 0.7, 0.8])
+                            self.vis.update_geometry(self.mesh_near_lumen_lineset)
                         # else:
 
                         # if(self.figure_mapping==1):
@@ -3823,46 +4008,59 @@ class PointCloudUpdater:
 
                 near_vpC_points.transform(TW_EM @ TEM_C)
 
-                # IVUS BASED DEFORMATION
-                if(self.live_deformation == 1 and self.registered_ct == 1 and self.dest_frame == 'target1'):
+                # IVUS BASED DEFORMATION ARAP
+                # if((self.live_deformation == 1 and self.registered_ct == 1 and self.dest_frame == 'target1') or (self.live_deformation==1 and self.endoanchor==1)):
                      
-                    #  coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.01, origin=[0, 0, 0])
-                    #  coordinate_frame.transform(TW_EM @ TEM_C)
-                    #  o3d.visualization.draw_geometries([self.registered_ct_mesh, self.centerline_pc, coordinate_frame, near_pC_points])
+                #     #  coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.01, origin=[0, 0, 0])
+                #     #  coordinate_frame.transform(TW_EM @ TEM_C)
+                #     #  o3d.visualization.draw_geometries([self.registered_ct_mesh, self.centerline_pc, coordinate_frame, near_pC_points])
 
-                    #  try:
+                #     #  try:
                         
-                    deformed_mesh = live_deform(self.registered_ct_mesh, self.constraint_indices, self.centerline_pc, TW_EM @ TEM_C, near_vpC_points )
-                    temp_lineset = create_wireframe_lineset_from_mesh(deformed_mesh)
-                    self.registered_ct_lineset.points = temp_lineset.points
-                    self.registered_ct_lineset.lines = temp_lineset.lines
-                    self.vis.update_geometry(self.registered_ct_lineset)
+                #     deformed_mesh = live_deform(self.registered_ct_mesh, self.constraint_indices, self.centerline_pc, TW_EM @ TEM_C, near_vpC_points )
+                #     temp_lineset = create_wireframe_lineset_from_mesh(deformed_mesh)
+                #     self.registered_ct_lineset.points = temp_lineset.points
+                #     self.registered_ct_lineset.lines = temp_lineset.lines
+                #     self.vis.update_geometry(self.registered_ct_lineset)
 
-                    # mapping from coarse deformed mesh to fine deformed mesh nodes for endoscopic view
-                    fine_deformed_vertices = deform_fine_mesh_using_knn(self.registered_ct_mesh, deformed_mesh, self.registered_ct_mesh_2, self.knn_idxs, self.knn_weights, self.coarse_template_vertices, self.fine_template_vertices, self.adjacency_matrix)
+                #     # mapping from coarse deformed mesh to fine deformed mesh nodes for endoscopic view
+                #     fine_deformed_vertices = deform_fine_mesh_using_knn(self.registered_ct_mesh, deformed_mesh, self.registered_ct_mesh_2, self.knn_idxs, self.knn_weights, self.coarse_template_vertices, self.fine_template_vertices, self.adjacency_matrix)
 
-                    # self.registered_ct_mesh_2.vertices = deformed_mesh.vertices
-                    self.registered_ct_mesh_2.vertices = o3d.utility.Vector3dVector(fine_deformed_vertices)
-                    self.registered_ct_mesh_2.compute_vertex_normals()
-                    self.vis2.update_geometry(self.registered_ct_mesh_2)
+                #     # self.registered_ct_mesh_2.vertices = deformed_mesh.vertices
+                #     self.registered_ct_mesh_2.vertices = o3d.utility.Vector3dVector(fine_deformed_vertices)
+                #     self.registered_ct_mesh_2.compute_vertex_normals()
+                #     self.vis2.update_geometry(self.registered_ct_mesh_2)
 
 
-                    # deform the green spheres
-                    ct_spheres_deformed_points = deform_points_using_knn(self.registered_ct_mesh, deformed_mesh,  self.knn_idxs_spheres, self.knn_weights_spheres, self.coarse_template_vertices, self.ct_centroids, self.adjacency_matrix)
-                    ct_spheres_temp = get_sphere_cloud(ct_spheres_deformed_points , 0.00225, 20, [0,1,0])
-                    self.ct_spheres.vertices =  ct_spheres_temp.vertices
-                    self.vis.update_geometry(self.ct_spheres)
-                    self.vis2.update_geometry(self.ct_spheres)
+                #     # deform the green spheres 
+                #     # ct_spheres_deformed_points = deform_points_using_knn(self.registered_ct_mesh, deformed_mesh,  self.knn_idxs_spheres, self.knn_weights_spheres, self.coarse_template_vertices, self.ct_centroids, self.adjacency_matrix)
+                #     # ct_spheres_temp = get_sphere_cloud(ct_spheres_deformed_points , 0.00225, 20, [0,1,0])
+                #     # self.ct_spheres.vertices =  ct_spheres_temp.vertices
+                #     # self.vis.update_geometry(self.ct_spheres)
+                #     # self.vis2.update_geometry(self.ct_spheres)
+
+                #     # deform the rings instead - don't use make sphere point cloud
+                #     # toruses = []
+                #     # for deformed_point, normal in (ct_spheres_deformed_points:   
+                #     #     torus = create_torus(deformed_point, self., self.major_radius, self.minor_radius, 30)
+                #     #     toruses = toruses + torus
+
+                    
+                #     ct_spheres_deformed_points = deform_points_using_knn(self.registered_ct_mesh, deformed_mesh,  self.knn_idxs_spheres, self.knn_weights_spheres, self.coarse_template_vertices, self.ct_spheres_points, self.adjacency_matrix)
+                #     clean_geom = o3d.geometry.TriangleMesh()
+                #     clean_geom.vertices = o3d.utility.Vector3dVector(ct_spheres_deformed_points)
+                #     # self.ct_spheres.vertices =  o3d.utility.Vector3dVector(ct_spheres_deformed_points)
+                #     self.ct_spheres.vertices = clean_geom.vertices
+                #     self.vis.update_geometry(self.ct_spheres)
+                #     self.vis2.update_geometry(self.ct_spheres)
                        
-                    #  except:
-                    #     print("IVUS live mesh deformation not working")
-                    #     pass
 
-                    # change the blue ivus far pc based on deformation
-                    test_far_pc = copy.deepcopy(self.far_pc_points)
-                    far_pc_deformed_points = deform_points_using_knn(self.registered_ct_mesh, deformed_mesh,  self.knn_idxs_far_pc, self.knn_weights_far_pc, self.coarse_template_vertices, self.far_pc_points, self.adjacency_matrix)
-                    self.far_pc.points =  o3d.utility.Vector3dVector(far_pc_deformed_points)
-                    self.vis.update_geometry(self.far_pc)
+
+                #     # change the blue ivus far pc based on deformation
+                #     # test_far_pc = copy.deepcopy(self.far_pc_points)
+                #     # far_pc_deformed_points = deform_points_using_knn(self.registered_ct_mesh, deformed_mesh,  self.knn_idxs_far_pc, self.knn_weights_far_pc, self.coarse_template_vertices, self.far_pc_points, self.adjacency_matrix)
+                #     # self.far_pc.points =  o3d.utility.Vector3dVector(far_pc_deformed_points)
+                #     # self.vis.update_geometry(self.far_pc)
 
 
                 # if you want all the point cloud points (will be really slow)
@@ -3875,7 +4073,10 @@ class PointCloudUpdater:
                     self.volumetric_near_point_cloud.points = near_vpC_points.points
 
 
+            
+
                 self.volumetric_near_point_cloud.paint_uniform_color([1,0,0])
+
 
             
             
@@ -3946,17 +4147,34 @@ class PointCloudUpdater:
                         # note this will mess up branch pass
                         self.simple_far_pc.points = copy.deepcopy(self.volumetric_far_point_cloud.points)
                         self.simple_far_pc.paint_uniform_color([0,0,1])
+                     
                     
 
 
                     # OVERRIDE BRANCH PASS COLOURING - this is needed for clustering later
                     # self.volumetric_far_point_cloud.paint_uniform_color([0,0,1])
 
-            
+            if(self.endoanchor==1):
+                if(volumetric_three_d_points_far_lumen is not None):
+                    # note this will mess up branch pass
+                    far_vpC_points=o3d.geometry.PointCloud()
+                    far_vpC_points.points=o3d.utility.Vector3dVector(volumetric_three_d_points_far_lumen)
+
+                    #downsample volumetric point cloud
+                    far_vpC_points = far_vpC_points.voxel_down_sample(voxel_size=0.0005)
+                    # if(self.endoanchor==1): # downsample again to prevent memory issues
+                    #     far_vpC_points = far_vpC_points.voxel_down_sample(voxel_size=0.0025)
+
+                    far_vpC_points.transform(TW_EM @ TEM_C)
+                    self.simple_far_pc.points = copy.deepcopy(far_vpC_points.points)
+                    self.simple_far_pc.paint_uniform_color([0,0,1])
+                else:
+                    self.simple_far_pc.points = o3d.utility.Vector3dVector([])
+
+        
 
             # self.vis.update_geometry(self.point_cloud)
             #JUST DONT VISUALIZE IT
-   
             self.vis.update_geometry(self.volumetric_near_point_cloud)
             self.vis.update_geometry(self.volumetric_far_point_cloud)
             self.vis.update_geometry(self.simple_far_pc)
@@ -3983,55 +4201,55 @@ class PointCloudUpdater:
 
        
 
-
-        if(self.live_deformation == 1 and self.registered_ct == 1 and self.dest_frame == 'target2' and volumetric_three_d_points_near_lumen is None):
+        # EM BASED DEFORMATION
+        # if(self.live_deformation == 1 and self.registered_ct == 1 and self.dest_frame == 'target2' and volumetric_three_d_points_near_lumen is None and self.endoanchor!=1):
 
             
                 
             
-            # check if EM transform is outside the mesh before deformation calculations
-            query_points = np.asarray([TW_EM[:3,3]])
-            query_points_tensor = o3d.core.Tensor(query_points, dtype=o3d.core.Dtype.Float32)
-            signed_distance = self.scene.compute_signed_distance(query_points_tensor)
-            signed_distance_np = signed_distance.numpy()  # Convert to NumPy array
+        #     # check if EM transform is outside the mesh before deformation calculations
+        #     query_points = np.asarray([TW_EM[:3,3]])
+        #     query_points_tensor = o3d.core.Tensor(query_points, dtype=o3d.core.Dtype.Float32)
+        #     signed_distance = self.scene.compute_signed_distance(query_points_tensor)
+        #     signed_distance_np = signed_distance.numpy()  # Convert to NumPy array
 
             
         
-            near_vpC_points = None #this should still work with live deform there's a condition inside its
+        #     near_vpC_points = None #this should still work with live deform there's a condition inside its
 
-            if(signed_distance_np[0] > 0):
-                # try:  
-                deformed_mesh = live_deform(self.registered_ct_mesh, self.constraint_indices, self.centerline_pc, TW_EM, near_vpC_points, self.dest_frame, self.scene, self.free_branch_indices )
+        #     if(signed_distance_np[0] > 0):
+        #         # try:  
+        #         deformed_mesh = live_deform(self.registered_ct_mesh, self.constraint_indices, self.centerline_pc, TW_EM, near_vpC_points, self.dest_frame, self.scene, self.free_branch_indices )
                 
-                temp_lineset = create_wireframe_lineset_from_mesh(deformed_mesh)
-                self.registered_ct_lineset.points = temp_lineset.points
-                self.registered_ct_lineset.lines = temp_lineset.lines
-                self.vis.update_geometry(self.registered_ct_lineset)
+        #         temp_lineset = create_wireframe_lineset_from_mesh(deformed_mesh)
+        #         self.registered_ct_lineset.points = temp_lineset.points
+        #         self.registered_ct_lineset.lines = temp_lineset.lines
+        #         self.vis.update_geometry(self.registered_ct_lineset)
 
-                # mapping from coarse deformed mesh to fine deformed mesh nodes for endoscopic view
-                fine_deformed_vertices = deform_fine_mesh_using_knn(self.registered_ct_mesh, deformed_mesh, self.registered_ct_mesh_2, self.knn_idxs, self.knn_weights, self.coarse_template_vertices, self.fine_template_vertices, self.adjacency_matrix)
+        #         # mapping from coarse deformed mesh to fine deformed mesh nodes for endoscopic view
+        #         fine_deformed_vertices = deform_fine_mesh_using_knn(self.registered_ct_mesh, deformed_mesh, self.registered_ct_mesh_2, self.knn_idxs, self.knn_weights, self.coarse_template_vertices, self.fine_template_vertices, self.adjacency_matrix)
 
-                # self.registered_ct_mesh_2.vertices = deformed_mesh.vertices
-                self.registered_ct_mesh_2.vertices = o3d.utility.Vector3dVector(fine_deformed_vertices)
-                self.registered_ct_mesh_2.compute_vertex_normals()
-                self.vis2.update_geometry(self.registered_ct_mesh_2)
+        #         # self.registered_ct_mesh_2.vertices = deformed_mesh.vertices
+        #         self.registered_ct_mesh_2.vertices = o3d.utility.Vector3dVector(fine_deformed_vertices)
+        #         self.registered_ct_mesh_2.compute_vertex_normals()
+        #         self.vis2.update_geometry(self.registered_ct_mesh_2)
 
-                # deform the green spheres
-                ct_spheres_deformed_points = deform_points_using_knn(self.registered_ct_mesh, deformed_mesh,  self.knn_idxs_spheres, self.knn_weights_spheres, self.coarse_template_vertices, self.ct_centroids, self.adjacency_matrix)
-                ct_spheres_temp = get_sphere_cloud(ct_spheres_deformed_points , 0.00225, 20, [0,1,0])
-                self.ct_spheres.vertices =  ct_spheres_temp.vertices
-                self.vis.update_geometry(self.ct_spheres)
-                self.vis2.update_geometry(self.ct_spheres)
-                # except:
-                #     print("EM live mesh deformation not working")
-                #     pass
+        #         # deform the green spheres
+        #         ct_spheres_deformed_points = deform_points_using_knn(self.registered_ct_mesh, deformed_mesh,  self.knn_idxs_spheres, self.knn_weights_spheres, self.coarse_template_vertices, self.ct_centroids, self.adjacency_matrix)
+        #         ct_spheres_temp = get_sphere_cloud(ct_spheres_deformed_points , 0.00225, 20, [0,1,0])
+        #         self.ct_spheres.vertices =  ct_spheres_temp.vertices
+        #         self.vis.update_geometry(self.ct_spheres)
+        #         self.vis2.update_geometry(self.ct_spheres)
+        #         # except:
+        #         #     print("EM live mesh deformation not working")
+        #         #     pass
 
                 
-                # change the blue ivus far pc based on deformation
-                test_far_pc = copy.deepcopy(self.far_pc_points)
-                far_pc_deformed_points = deform_points_using_knn(self.registered_ct_mesh, deformed_mesh,  self.knn_idxs_far_pc, self.knn_weights_far_pc, self.coarse_template_vertices, test_far_pc, self.adjacency_matrix)
-                self.far_pc.points =  o3d.utility.Vector3dVector(far_pc_deformed_points)
-                self.vis.update_geometry(self.far_pc)
+        #         # change the blue ivus far pc based on deformation
+        #         test_far_pc = copy.deepcopy(self.far_pc_points)
+        #         far_pc_deformed_points = deform_points_using_knn(self.registered_ct_mesh, deformed_mesh,  self.knn_idxs_far_pc, self.knn_weights_far_pc, self.coarse_template_vertices, test_far_pc, self.adjacency_matrix)
+        #         self.far_pc.points =  o3d.utility.Vector3dVector(far_pc_deformed_points)
+        #         self.vis.update_geometry(self.far_pc)
 
         # CARDIAC DEFORMATION
 
@@ -4055,6 +4273,8 @@ class PointCloudUpdater:
                 self.previous_peak = most_recent_peak 
                 self.ecg_state = 1
                 print("RR interval:", self.period)
+
+            
 
             
             
@@ -4109,15 +4329,33 @@ class PointCloudUpdater:
 
             # ct_spheres_deformed_points = deform_points_using_knn(self.registered_ct_mesh, self.deformed_mesh,  self.knn_idxs_spheres, self.knn_weights_spheres, self.coarse_template_vertices, self.ct_centroids, self.adjacency_matrix)
 
-            
-            ct_spheres_deformed_vertices = deform_points_using_knn(self.registered_ct_mesh, self.deformed_mesh,  self.knn_idxs_spheres, self.knn_weights_spheres, self.coarse_template_vertices, self.vertices_before, self.adjacency_matrix)
-            # ct_spheres_temp = get_sphere_cloud(ct_spheres_deformed_points , 0.00225, 20, [0,1,0])
-            # self.ct_spheres.vertices =  ct_spheres_temp.vertices
-            self.ct_spheres.vertices =  o3d.utility.Vector3dVector(ct_spheres_deformed_vertices)
+            # sphere deformation
+            # ct_spheres_deformed_vertices = deform_points_using_knn(self.registered_ct_mesh, self.deformed_mesh,  self.knn_idxs_spheres, self.knn_weights_spheres, self.coarse_template_vertices, self.vertices_before, self.adjacency_matrix)
+            # self.ct_spheres.vertices =  o3d.utility.Vector3dVector(ct_spheres_deformed_vertices)
+            # self.vis.update_geometry(self.ct_spheres)
+            # self.vis2.update_geometry(self.ct_spheres)
+
+
+            # ring deformation
+            ct_spheres_deformed_points = deform_points_using_knn(self.registered_ct_mesh, self.deformed_mesh,  self.knn_idxs_spheres, self.knn_weights_spheres, self.coarse_template_vertices, self.ct_spheres_points, self.adjacency_matrix)
+
+            self.ct_spheres.vertices =  o3d.utility.Vector3dVector(ct_spheres_deformed_points)
+            self.vis_2_spheres.vertices = self.ct_spheres.vertices
+            self.vis_2_spheres.triangles = self.ct_spheres.triangles
+            self.vis_2_spheres.compute_vertex_normals()
+            self.vis_2_spheres.vertex_colors = self.ct_spheres.vertex_colors
+
             self.vis.update_geometry(self.ct_spheres)
-            self.vis2.update_geometry(self.ct_spheres)
+            self.vis2.update_geometry(self.vis_2_spheres)
+            # self.vis2.update_geometry(self.ct_spheres)
+
+
 
             self.ecg_previous = self.ecg_latest
+
+
+
+            
             
         # print("branch pass:", self.branch_pass)
 
@@ -4139,21 +4377,29 @@ class PointCloudUpdater:
 
             T = TW_EM 
 
-            # up = -T[:3, 2]          # Z-axis (3rd column)
+            if(self.endoanchor==1):
+                T = self.most_recent_extrinsic
+
+
+            
 
             calib_view_angle = -90
             up = -T[:3, 2]
-            up = rotate_vector_around_axis( -T[:3, 0]  , up , calib_view_angle) # new steerable catheter
+            up = rotate_vector_around_axis( -T[:3, 0], up, calib_view_angle) # new steerable catheter - aptus tourguide
+
+            # if(self.endoanchor==1):
+            #     up = -T[:3, 2]          # Z-axis (3rd column)
 
 
 
 
             front = -T[:3, 0]      # Negative X-axis (1st column) - look forward or back
-
             lookat = T[:3, 3]      # Translation vector (camera position)
             # translation = np.asarray([-0.002,0,0.004])
-            translation = np.array([-0.002, 0.004, 0.0])
-            lookat = (TW_EM[:3,:3] @ translation) + lookat
+            translation = np.array([-0.002, 0.004, 0.0])  # aptus tourguide
+            # if(self.endoanchor==1):
+            #     translation = np.array([-0.0, 0.0, 0.0])  # aptus tourguide
+            lookat = (T[:3,:3] @ translation) + lookat
             # lookat = lookat # for now
             
 
@@ -4352,19 +4598,19 @@ class PointCloudUpdater:
 
             # EVERY ITERATION
             
-            # current_evar = predict_deploy(extrinsic_matrix, self.aortic_centreline,self.lofted_cylinder,self.strut_geometry,self.strut_distances,self.evar_length, self.centreline_transforms, self.GD_centreline,self.evar_radius, self.fen_distances, self.fen_angles)
+            current_evar = predict_deploy(extrinsic_matrix, self.aortic_centreline,self.lofted_cylinder,self.strut_geometry,self.strut_distances,self.evar_length, self.centreline_transforms, self.GD_centreline,self.evar_radius, self.fen_distances, self.fen_angles)
             
 
-            # self.evar_graft.vertices = current_evar.vertices
-            # self.evar_graft.triangles = current_evar.triangles
-            # self.evar_graft.vertex_colors = current_evar.vertex_colors
+            self.evar_graft.vertices = current_evar.vertices
+            self.evar_graft.triangles = current_evar.triangles
+            self.evar_graft.vertex_colors = current_evar.vertex_colors
 
-            # self.evar_graft.compute_vertex_normals()
+            self.evar_graft.compute_vertex_normals()
             
-            # self.vis.update_geometry(self.evar_graft)
+            self.vis.update_geometry(self.evar_graft)
 
-            # # FOR FEVAR NAVIGATION
-            # self.vis2.update_geometry(self.evar_graft)
+            # FOR FEVAR NAVIGATION
+            self.vis2.update_geometry(self.evar_graft)
 
             
             
@@ -4413,8 +4659,9 @@ class PointCloudUpdater:
 
         if(self.registered_ct ==1 or self.funsr_only == 1):
             self.vis2.update_geometry(self.tracker)
-            self.vis2.poll_events()
-            self.vis2.update_renderer()
+            if(self.endoanchor==1):
+                self.vis2.update_geometry(self.catheter)
+            
         
             if(self.guidewire==1):
 
@@ -4462,16 +4709,16 @@ class PointCloudUpdater:
 
                 TW_EM_3 = transform_stamped_to_matrix(TW_EM_3)
 
-                # budge the base transform so its inside the mesh if outside
-                query_points_tensor = o3d.core.Tensor([TW_EM_3[:3,3]], dtype=o3d.core.Dtype.Float32)  # shape (1,3)
-                signed_distance = self.scene.compute_signed_distance(query_points_tensor)
-                signed_distance_np = signed_distance.numpy()  # Convert to NumPy array
-                signed_distance_np = signed_distance_np.squeeze()
+                # - BUDGE BASE FRAME INSIDE MESH ---- #
+                # query_points_tensor = o3d.core.Tensor([TW_EM_3[:3,3]], dtype=o3d.core.Dtype.Float32)  # shape (1,3)
+                # signed_distance = self.scene.compute_signed_distance(query_points_tensor)
+                # signed_distance_np = signed_distance.numpy()  # Convert to NumPy array
+                # signed_distance_np = signed_distance_np.squeeze()
 
-                if(signed_distance_np > 0):
+                # if(signed_distance_np > 0):
 
-                    result = self.scene.compute_closest_points(query_points_tensor)
-                    TW_EM_3[:3,3] = result['points'].numpy()[0]   
+                #     result = self.scene.compute_closest_points(query_points_tensor)
+                #     TW_EM_3[:3,3] = result['points'].numpy()[0]   
                     
 
 
@@ -4519,17 +4766,23 @@ class PointCloudUpdater:
                 base_rotated_y = TW_EM_3 
                 tip_rotated_y = TW_EM @ T_x
 
+                if(self.endoanchor==1):
+                    tip_rotated_y = self.most_recent_extrinsic @ T_x
+
                 
 
 
                 # new version in x y plane (Oct 25)
                 arc_points, transform_needed = compute_arc_backwards_from_tip_and_base(tip_rotated_y, base_rotated_y, self.steerable_arc_length)
 
-                new_tube = create_tube_mesh_catheter_fast(arc_points, radius=0.0015, segments=7)
+                if(self.endoanchor==1):
+                    arc_points = arc_points[:-1, :] #chop off a little to expose IVUS
+
+                new_tube = create_tube_mesh_catheter_fast(arc_points, radius=self.catheter_radius, segments=7)
 
                 self.bending_segment.vertices = new_tube.vertices
                 self.bending_segment.triangles = new_tube.triangles
-                self.bending_segment.paint_uniform_color([0.678, 0.847, 0.902])
+                self.bending_segment.paint_uniform_color(self.bending_segment_color)
                 self.bending_segment.compute_vertex_normals()
                 self.vis.update_geometry(self.bending_segment)
 
@@ -4571,7 +4824,7 @@ class PointCloudUpdater:
 
           
 
-                shaft = create_tube_mesh_catheter_fast(arc_points, radius=0.0015, segments=8)
+                shaft = create_tube_mesh_catheter_fast(arc_points, radius=self.catheter_radius, segments=8)
 
                 self.catheter_shaft.vertices = shaft.vertices
                 self.catheter_shaft.triangles = shaft.triangles
@@ -4581,7 +4834,8 @@ class PointCloudUpdater:
 
 
                 
-        
+        self.vis2.poll_events()
+        self.vis2.update_renderer()
 
         self.vis.poll_events()
         self.vis.update_renderer()
