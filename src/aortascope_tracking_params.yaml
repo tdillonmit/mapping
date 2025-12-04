@@ -20,7 +20,7 @@ voxel_size : 0.005
 conf_threshold : 0.09
 
 # ML segmentation
-deeplumen_on : 0
+deeplumen_on : 1
 # model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/full_inkbit_aorta_2/weights.weights.h5
 
 # model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/combined_dataset/weights.h5
@@ -36,7 +36,7 @@ deeplumen_valve_on : 0
 
 # mapping visualization parameters
 endoanchor: 0
-vpC_map: 0 #turn on for live deformation not cardiac
+vpC_map: 1 #turn on for live deformation not cardiac
 bpC_map: 0
 extend: 0
 tsdf_map: 0
@@ -49,7 +49,7 @@ dissection_track: 0
 registered_ct : 1
 registered_ct_dataset: user_has_not_defined
 live_deformation: 0 # turned on recently, mesh still looks distorted and probably not worth it - enough validation in endoanchor
-cardiac_deformation: 0
+cardiac_deformation: 1
 animal: 0
 guidewire: 0 # recently turned off Nov 11
 steerable: 1
@@ -58,11 +58,12 @@ double_display: 1
 test_image: 0
 test_transform: 0
 machine: 'philips'
+vis_red_vessel: 1
 
 figure_mapping: 0
 
 
-load_evar_graft: 1
+load_evar_graft: 0
 show_evar_wireframe: 1
 
 

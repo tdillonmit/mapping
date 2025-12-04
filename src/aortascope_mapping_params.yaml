@@ -81,6 +81,7 @@ double_display: 1
 test_image: 0 # for offline processing
 test_transform: 0 # frame grabber plugged in, EM not, ok for models that segment a shape with black background
 machine: philips
+vis_red_vessel: 0
 
 # figure_mapping: 1
 figure_mapping: 1
