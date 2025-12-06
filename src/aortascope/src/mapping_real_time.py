@@ -2722,19 +2722,19 @@ class PointCloudUpdater:
             
 
             # initialize ecg parameters
-            if(self.animal == 1):
-                ecg_calibration_data = []
-                while delta < 4.0:
-                # or while reg status not there
+            # if(self.animal == 1):
+            ecg_calibration_data = []
+            while delta < 4.0:
+            # or while reg status not there
 
-                    t_current = rospy.Time.now()
-                    t_current = t_current.to_sec()
-                    delta = t_current  - t_start
-                    ecg_calibration_data.append(self.ecg_latest)
-                self.ecg_threshold = calibrateThreshold(ecg_calibration_data)
+                t_current = rospy.Time.now()
+                t_current = t_current.to_sec()
+                delta = t_current  - t_start
+                ecg_calibration_data.append(self.ecg_latest)
+            self.ecg_threshold = calibrateThreshold(ecg_calibration_data)
 
-            else:
-                self.ecg_threshold = 620
+            # else:
+            #     self.ecg_threshold = 620
 
             print("ecg calibrated threshold is: ", self.ecg_threshold)
 
