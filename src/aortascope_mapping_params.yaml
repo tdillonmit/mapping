@@ -37,8 +37,8 @@ deeplumen_on : 1
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/best_cbam_model/weights.weights.h5
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/cbam_11_phantoms/weights.weights.h5
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/cbam_12_phantoms_best_dice/weights.weights.h5
-# model_path: /home/tdillon/segmentation/deepivus_trained_models/cbam_13_phantoms/weights.weights.h5
-model_path: /home/tdillon/segmentation/deepivus_trained_models/frozen_animal_model/weights.weights.h5
+model_path: /home/tdillon/segmentation/deepivus_trained_models/cbam_13_phantoms/weights.weights.h5
+# model_path: /home/tdillon/segmentation/deepivus_trained_models/frozen_animal_model/weights.weights.h5
 
 
 
@@ -73,14 +73,14 @@ registered_ct : 0
 registered_ct_dataset: user_has_not_defined
 live_deformation: 0
 cardiac_deformation: 0
-animal: 0
+animal: 1
 guidewire: 0
 steerable: 0
 
 # double_display: 1
 double_display: 1
-test_image: 1 # for offline processing
-test_transform: 1 # frame grabber plugged in, EM not, ok for models that segment a shape with black background
+test_image: 0 # for offline processing
+test_transform: 0 # frame grabber plugged in, EM not, ok for models that segment a shape with black background
 machine: philips
 vis_red_vessel: 0
 

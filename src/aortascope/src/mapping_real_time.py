@@ -688,7 +688,11 @@ class PointCloudUpdater:
 
         # self.fen_colors = [[1,1,0],[1,0,0],[0,0,1],[0,1,0]] # assuming 3 fens in head 4 in abd
 
-        self.fen_colors = [[0,0,1],[1,1,0],[0,1,0],[1,0,0]] # assuming 3 fens in head 4 in abd top to bottom C SMA LRA RRA
+        # self.fen_colors = [[0,0,1],[1,1,0],[0,1,0],[1,0,0]] # assuming 3 fens in head 4 in abd top to bottom C SMA LRA RRA
+
+        # self.fen_colors = [[0,0,1],[1,1,0],[0,1,0],[1,0,0]] # assuming 3 fens in head 4 in abd top to bottom C SMA LRA RRA
+
+        self.fen_colors = [[1,1,0],[1,0,0],[0,1,0],[0,0,1]] # Yellow, red, green, blue
 
         x, y = msg.data
         self.clicked_pixel = [x*(1/ (2.6*0.95)),y*(1/ (2.6*0.95*0.95))]
@@ -1158,17 +1162,30 @@ class PointCloudUpdater:
     
         # load the calibration file for the REPLAYED dataset - note this means you will have that calibration file loaded when you 
         # go back to aortscope real time mapping
-        with open(self.write_folder + '/calibration_parameters_ivus.yaml', 'r') as file:
-            self.calib_yaml = yaml.safe_load(file)
 
-        print("loaded calibration file for dataset:",  self.write_folder)
+        try:
+            with open(self.write_folder + '/calibration_parameters_ivus.yaml', 'r') as file:
+                self.calib_yaml = yaml.safe_load(file)
+        
 
-        self.angle = self.calib_yaml['/angle']
-        self.translation = self.calib_yaml['/translation']
-        self.radial_offset = self.calib_yaml['/radial_offset']
-        self.o_clock = self.calib_yaml['/oclock']
+            print("loaded calibration file for dataset:",  self.write_folder)
 
-        print("offset angle is!", self.angle)
+            self.angle = self.calib_yaml['/angle']
+            self.translation = self.calib_yaml['/translation']
+            self.radial_offset = self.calib_yaml['/radial_offset']
+            self.o_clock = self.calib_yaml['/oclock']
+
+            print("offset angle is!", self.angle)
+
+        except:
+            print("NO CALIBRATION FOUND")
+            self.angle = 0
+            self.translation=0
+            self.radial_offset=0
+            self.o_clock = 0
+
+            self.test_transform=1
+            
 
 
         # rospy.set_param('replay', 0)
@@ -2187,11 +2204,15 @@ class PointCloudUpdater:
         no_reg=0
 
         self.once = 0
+
+        refine=0
        
 
         print("loading registration lineset")
         self.registered_ct_lineset = o3d.io.read_line_set(self.write_folder+ '' + '/final_registration.ply')
         self.registered_ct_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/final_registration_mesh.ply')
+
+        # self.registered_ct_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/final_registration_mesh_final.ply')
 
         # self.registered_ct_lineset = o3d.io.read_line_set(self.write_folder+ '' + '/backup/final_registration.ply')
         # self.registered_ct_mesh = o3d.io.read_triangle_mesh(self.write_folder + '/backup/final_registration_mesh.ply')
@@ -2250,6 +2271,7 @@ class PointCloudUpdater:
         #     return
 
         ct_centroid_pc = o3d.io.read_point_cloud(self.write_folder + '/side_branch_centrelines.ply')
+        # ct_centroid_pc = o3d.io.read_point_cloud(self.write_folder + '/side_branch_centrelines_final.ply')
         if(self.refine==1):
             ct_centroid_pc = o3d.io.read_point_cloud(self.write_folder + '/side_branch_centrelines_refine.ply')
 
@@ -2260,9 +2282,22 @@ class PointCloudUpdater:
         # o3d.visualization.draw_geometries([self.centerline_pc, self.registered_ct_lineset])
 
 
-        # NOte that ivus centroids have been used here!!!
+        # NOte that IVUS centroids have been used here!!!
         # self.ct_centroids = np.load(self.write_folder + '/ct_centroids.npy')
         self.ct_centroids = np.load(self.write_folder + '/ivus_centroids.npy')
+
+        side_branch_centrelines_indices = np.load(self.write_folder + '/side_branch_centrelines_indices.npy')
+
+        # ct_centroid_pc_points = np.asarray(ct_centroid_pc.points)
+ 
+        # side_branch_points_grouped = []
+        # for check_index in np.unique(side_branch_centrelines_indices):
+        #     relevant_args = np.argwhere(side_branch_centrelines_indices == check_index)[:,0]
+        #     relevant_side_branch_centrelines_pc_points = ct_centroid_pc_points[relevant_args,:]
+        #     side_branch_points_grouped.append(relevant_side_branch_centrelines_pc_points)
+
+        # self.ct_centroids = np.vstack(side_branch_points_grouped)
+
 
         # only load CORRESPONDING ivus_centroids to remove false positives
         load_corres = 1
@@ -2827,7 +2862,7 @@ class PointCloudUpdater:
         self.vis2.update_renderer()
 
         # remove this in future
-        # self.simulate_device()
+        self.simulate_device()
         self.evar_loft_sim = 0
 
         self.catheter_radius = 0.0015
@@ -3344,6 +3379,8 @@ class PointCloudUpdater:
             # print("lagging")
             # timing_delta = rospy.Duration(0.125) #ultrasound machine + frame grabber TURN OFF FOR NAVIGATION!
             timing_delta = rospy.Duration(0.375) #ultrasound machine + frame grabber TURN OFF FOR NAVIGATION!
+            if(self.animal==1): # assuming 0.018 probe
+                timing_delta = rospy.Duration(0.05) 
             self.transform_time = self.transform_time - timing_delta
             # self.transform_time = self.transform_time 
         
