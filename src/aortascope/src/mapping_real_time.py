@@ -2868,28 +2868,33 @@ class PointCloudUpdater:
         self.catheter_radius = 0.0015
 
         # integrated IVUS and steering
+        self.bend_plane_angle = -1*(np.pi / 180)*12 # not 018 endoanchor at least, think its 035 endoanchor, but not necessarily normal aptus..
         if(self.endoanchor==1):
             self.vpC_map = 1
             self.vis.add_geometry(self.volumetric_near_point_cloud)
             self.vis.add_geometry(self.volumetric_far_point_cloud)
             self.vis.add_geometry(self.simple_far_pc)
-            self.catheter_radius = 0.0025
-            self.bending_segment_color = [0.2, 0.2, 1.0]
+
+            self.bend_plane_angle = -2*(np.pi / 180)*12 # 018 endoanchor
+
+            # self.catheter_radius = 0.0025
+            # self.bending_segment_color = [0.2, 0.2, 1.0]
             
 
-            self.catheter.paint_uniform_color([1,0.5,0])
-            self.vis.add_geometry(self.catheter)
+            # self.catheter.paint_uniform_color([1,0.5,0])
+            # self.vis.add_geometry(self.catheter)
 
-            self.vis2.add_geometry(self.catheter) # viewing from ivus probe now
-            self.vis2.remove_geometry(self.tracker)
+            # self.vis2.add_geometry(self.catheter) # viewing from ivus probe now
+            # self.vis2.remove_geometry(self.tracker)
 
             #true location of shaft not being represented, but true location of IVUS is
-            self.vis.remove_geometry(self.tracker)
+            # self.vis.remove_geometry(self.tracker)
 
 
 
             # LOAD THE ENDOANCHOR CALIBRATION SO DON'T GET MIXED UP
-            with open('/home/tdillon/mapping/src/calibration_parameters_endoanchor.yaml', 'r') as file:
+            # with open('/home/tdillon/mapping/src/calibration_parameters_endoanchor.yaml', 'r') as file: # 035
+            with open('/home/tdillon/mapping/src/calibration_parameters_018_endoanchor_2.yaml', 'r') as file: #018
                 self.calib_yaml = yaml.safe_load(file)
 
             self.angle = self.calib_yaml['/angle']
@@ -4782,13 +4787,16 @@ class PointCloudUpdater:
 
             T = TW_EM 
 
-            if(self.endoanchor==1):
-                T = self.most_recent_extrinsic
+            # if(self.endoanchor==1):
+            #     T = self.most_recent_extrinsic
 
 
             
 
             calib_view_angle = -90
+            # calib_view_angle = ... endoanchor 035
+            # calib_view_angle = -90 endoanchor 018
+
             up = -T[:3, 2]
             up = rotate_vector_around_axis( -T[:3, 0], up, calib_view_angle) # new steerable catheter - aptus tourguide
 
@@ -4805,6 +4813,9 @@ class PointCloudUpdater:
             translation = np.array([-0.004, 0.004, 0.0])  # FEVAR look a little further back
             # if(self.endoanchor==1):
             #     translation = np.array([-0.0, 0.0, 0.0])  # aptus tourguide
+
+
+
             lookat = (T[:3,:3] @ translation) + lookat
             # lookat = lookat # for now
             
@@ -5160,7 +5171,13 @@ class PointCloudUpdater:
                 # T_x = np.eye(4)
                 # T_x[:3, :3] = R_x
 
-                theta = -(np.pi / 180)*12
+                # for calibration in def/bending_segment_transform_test.py
+                # print("base", TW_EM_3)
+                # print("tip pre rotate", TW_EM)
+                
+
+                # theta = -(np.pi / 180)*12
+                theta = self.bend_plane_angle
                 c, s = np.cos(theta), np.sin(theta)
                 R_x = np.array([
                     [1, 0, 0],
@@ -5174,8 +5191,11 @@ class PointCloudUpdater:
                 base_rotated_y = TW_EM_3 
                 tip_rotated_y = TW_EM @ T_x
 
-                if(self.endoanchor==1):
-                    tip_rotated_y = self.most_recent_extrinsic @ T_x
+                # if(self.endoanchor==1):
+                #     tip_rotated_y = self.most_recent_extrinsic @ T_x
+
+
+                
 
                 
 
