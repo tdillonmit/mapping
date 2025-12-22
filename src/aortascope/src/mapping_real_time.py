@@ -1159,10 +1159,20 @@ class PointCloudUpdater:
 
         self.write_folder = rospy.get_param('dataset',0)
 
-    
+        high_level_path = self.write_folder[:-12]
+        if(self.write_folder.endswith('bin_0')==True):
+            for i in np.arange(9):
+                self.write_folder = high_level_path + '/gated/bin_' + str(i)
+                print("RUNNING BIN:", self.write_folder)
+                self.replay_iteration()
+        else:
+            self.replay_iteration()
+            
+
         # load the calibration file for the REPLAYED dataset - note this means you will have that calibration file loaded when you 
         # go back to aortscope real time mapping
 
+    def replay_iteration(self):
         try:
             with open(self.write_folder + '/calibration_parameters_ivus.yaml', 'r') as file:
                 self.calib_yaml = yaml.safe_load(file)
@@ -1174,6 +1184,9 @@ class PointCloudUpdater:
             self.translation = self.calib_yaml['/translation']
             self.radial_offset = self.calib_yaml['/radial_offset']
             self.o_clock = self.calib_yaml['/oclock']
+            
+            self.default_values=load_default_values(self.write_folder + '/calibration_parameters_ivus.yaml')
+            self.scaling = self.default_values['/scaling']
 
             print("offset angle is!", self.angle)
 
@@ -1317,20 +1330,7 @@ class PointCloudUpdater:
         except:
             print("no us frame present")
 
-        try:
-            self.vis.remove_geometry(self.mesh_near_lumen)
-        except:
-            print("no near lumen present")
-
-        try:
-            self.vis.remove_geometry(self.volumetric_near_point_cloud)
-        except:
-            print("no volumetric near point cloud present")
-
-        try:
-            self.vis.remove_geometry(self.volumetric_far_point_cloud)
-        except:
-            print("no volumetric far point cloud present")
+        
 
         self.extend=0
 
@@ -1368,6 +1368,22 @@ class PointCloudUpdater:
                     self.processed_centreline.paint_uniform_color([1,0,0])
 
             o3d.io.write_point_cloud(self.write_folder +  "/smoothed_bspline_centreline.ply", self.processed_centreline)
+
+        try:
+            self.vis.remove_geometry(self.mesh_near_lumen)
+        except:
+            print("no near lumen present")
+
+        try:
+            self.vis.remove_geometry(self.volumetric_near_point_cloud)
+        except:
+            print("no volumetric near point cloud present")
+
+        try:
+            self.vis.remove_geometry(self.volumetric_far_point_cloud)
+        except:
+            print("no volumetric far point cloud present")
+
 
         if(self.gating==1):
             self.lightweight_reinitialize()
@@ -2784,21 +2800,33 @@ class PointCloudUpdater:
             self.deformed_mesh = copy.deepcopy(self.registered_ct_mesh)
 
             
-
+            # OLD METHOD - MODEL MOTION BETWEEN TWO PHASES
             # load cardiac motion initialization
-            self.systole_locations = np.load(self.write_folder + '/systole_locations.npy')
-            self.diastole_locations = np.load(self.write_folder + '/diastole_locations_before_pulsatile.npy')
+            # self.systole_locations = np.load(self.write_folder + '/systole_locations.npy')
+            # self.diastole_locations = np.load(self.write_folder + '/diastole_locations_before_pulsatile.npy')
 
-            # precompute values
-            vertsTransformed_full = np.load(self.write_folder+ "/vertsTransformed_full.npy")
-            C =vertsTransformed_full
-            segment_lengths = np.linalg.norm(C[1:] - C[:-1], axis=1)
-            d_cum_centerline = np.concatenate(([0], np.cumsum(segment_lengths)))
-            tree = cKDTree(C)
-            _, closest_idx = tree.query(self.diastole_locations)
-            self.d_cum = d_cum_centerline[closest_idx]  # (K,)
-            self.direction_vectors = self.diastole_locations - self.systole_locations  # shape (K,3)
-            self.PWV = 2.5
+            # # precompute values
+            # vertsTransformed_full = np.load(self.write_folder+ "/vertsTransformed_full.npy")
+            # C =vertsTransformed_full
+            # segment_lengths = np.linalg.norm(C[1:] - C[:-1], axis=1)
+            # d_cum_centerline = np.concatenate(([0], np.cumsum(segment_lengths)))
+            # tree = cKDTree(C)
+            # _, closest_idx = tree.query(self.diastole_locations)
+            # self.d_cum = d_cum_centerline[closest_idx]  # (K,)
+            # self.direction_vectors = self.diastole_locations - self.systole_locations  # shape (K,3)
+            # self.PWV = 2.5
+
+            # NEW METHOD - USE ALL PHASES AND USE NON RIGID ICP TO REGISTER TO EACH TIMEPOINT
+            displacements = []
+            bins = np.arange(9)
+            high_level_path = self.write_folder[:-12]
+            displacements = np.load(high_level_path + '/displacements.npz', allow_pickle = True)
+            self.displacements = displacements['arr_0']
+
+            self.systole_locations = np.asarray(self.deformed_mesh.vertices)
+
+            
+
 
             # VALIDATE MOTION
             mesh_1 = o3d.io.read_triangle_mesh('/home/tdillon/datasets/record_test/gated/bin_3/tsdf_mesh_near_lumen.ply')
@@ -4439,7 +4467,7 @@ class PointCloudUpdater:
                 # if(self.extend == 1):
                 if(self.extend == 1 and (self.dissection_mapping == 1 or self.pullback==0)):
                     # prevent memory issues by commenting this out
-                    # self.volumetric_near_point_cloud.points.extend(near_vpC_points.points)
+                    self.volumetric_near_point_cloud.points.extend(near_vpC_points.points)
                     pass
                 else:
                     self.volumetric_near_point_cloud.points = near_vpC_points.points
@@ -4707,13 +4735,14 @@ class PointCloudUpdater:
             # else:
             #     alpha = 0.5 * (1 - np.cos(np.pi * ((1 - M) / 0.25)))
 
-            #NEW METHOD
-            current_vertices, alpha = compute_current_vertices_cached(self.d_cum,self.systole_locations,self.direction_vectors,phase_time-0.5, self.period, self.PWV)
+            #OLD METHOD - MODEL BASED MOTION
+            # current_vertices, alpha = compute_current_vertices_cached(self.d_cum,self.systole_locations,self.direction_vectors,phase_time-0.5, self.period, self.PWV)
 
             
-            # when you fixed it we lost some vertices - old method
-            # current_vertices = ((alpha*(self.diastole_locations - self.systole_locations)) + self.systole_locations)  # note M = 0 is systole
-
+            # NEW METHOD - USE 4DUS PHASES TO DRIVE MOTION
+            bin_index = time_to_bin(phase_time, self.period, num_bins=9)
+            displacement = self.displacements[bin_index]
+            current_vertices = self.systole_locations + displacement
 
             self.deformed_mesh.vertices = o3d.utility.Vector3dVector(current_vertices)
 

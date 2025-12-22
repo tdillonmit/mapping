@@ -14,6 +14,7 @@ save_replay_data: 1
 
 # healthy first return manual segmentation
 tsdf_map : 1
+# voxel_size : 0.0025
 voxel_size : 0.0035
 # voxel_size : 0.006
 
@@ -79,7 +80,7 @@ steerable: 0
 
 # double_display: 1
 double_display: 1
-test_image: 0 # for offline processing
+test_image: 1 # for offline processing ONLY needed
 test_transform: 0 # frame grabber plugged in, EM not, ok for models that segment a shape with black background
 machine: philips
 vis_red_vessel: 0
