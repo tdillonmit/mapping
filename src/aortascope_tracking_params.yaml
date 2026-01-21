@@ -49,7 +49,7 @@ dissection_track: 0
 registered_ct : 1
 registered_ct_dataset: user_has_not_defined
 live_deformation: 0 # turned on recently, mesh still looks distorted and probably not worth it - enough validation in endoanchor
-cardiac_deformation: 0
+cardiac_deformation: 1
 animal: 0
 guidewire: 0 # recently turned off Nov 11
 steerable: 1

@@ -19,28 +19,22 @@ voxel_size : 0.0035
 # voxel_size : 0.006
 
 
-conf_threshold: 0.995  # lower is better for animals where branch segmentation is less certain
-# conf_threshold: 0.10 # lower is better for animals where branch segmentation is less certain
+conf_threshold: 0.92  # lower is better for animals where branch segmentation is less certain
+# conf_threshold: 0.0010 # lower is better for animals where branch segmentation is less certain
+# conf_threshold: 0.0000010 # lower is better for animals where branch segmentation is less certain
 
 # ML segmentation
 deeplumen_on : 1
 
-# model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/full_inkbit_aorta_2/weights.weights.h5
-# model_path: /home/tdillon/dissection_mapping/deepivus_3D_testing/deepivus_trained_models/combined_dataset/weights.h5
-# model_path: /home/tdillon/segmentation/deepivus_trained_models/ex_vivo_pigs_mgh/weights.weights.h5
-# model_path: /home/tdillon/segmentation/deepivus_trained_models/combined_inkbit_dataset/weights.weights.h5
-# model_path: /home/tdillon/segmentation/deepivus_trained_models/ex_vivo_pigs_with_pva/weights.weights.h5
 
 
-# model_path: /home/tdillon/segmentation/deepivus_trained_models/k_phantom_models_from_scratch/weights.weights.h5
-# model_path: /home/tdillon/segmentation/deepivus_trained_models/hybrid_cnn_imbalanced_full/weights.weights.h5
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/temp_cbam_model/weights.weights.h5
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/best_cbam_model/weights.weights.h5
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/cbam_11_phantoms/weights.weights.h5
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/cbam_12_phantoms_best_dice/weights.weights.h5
 model_path: /home/tdillon/segmentation/deepivus_trained_models/cbam_13_phantoms/weights.weights.h5
-# model_path: /home/tdillon/segmentation/deepivus_trained_models/frozen_animal_model/weights.weights.h5
-
+# model_path: /home/tdillon/segmentation/deepivus_trained_models/frozen_animal_model/weights.weights.h5 
+# model_path: /home/tdillon/segmentation/deepivus_trained_models/frozen_animal_model_2/weights.weights.h5  # slightly better detection I think?
 
 
 
@@ -80,7 +74,7 @@ steerable: 0
 
 # double_display: 1
 double_display: 1
-test_image: 1 # for offline processing ONLY needed
+test_image: 0 # for offline processing ONLY needed
 test_transform: 0 # frame grabber plugged in, EM not, ok for models that segment a shape with black background
 machine: philips
 vis_red_vessel: 0

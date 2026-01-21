@@ -1159,10 +1159,17 @@ class PointCloudUpdater:
 
         self.write_folder = rospy.get_param('dataset',0)
 
+
+        image_path =  '/home/tdillon/datasets/k4_pva_post_4dct_2/grayscale_images/*.npy'
+        sorted_images=sort_folder_string(image_path, "grayscale_image_")
+        grayscale_images=load_numpy_data_from_folder(sorted_images)
+        self.constant_image = grayscale_images[29]
+
         high_level_path = self.write_folder[:-12]
         if(self.write_folder.endswith('bin_0')==True):
             for i in np.arange(9):
                 self.write_folder = high_level_path + '/gated/bin_' + str(i)
+                rospy.set_param('dataset',self.write_folder)
                 print("RUNNING BIN:", self.write_folder)
                 self.replay_iteration()
         else:
@@ -1197,7 +1204,7 @@ class PointCloudUpdater:
             self.radial_offset=0
             self.o_clock = 0
 
-            self.test_transform=1
+            # self.test_transform=1
             
 
 
@@ -1220,11 +1227,12 @@ class PointCloudUpdater:
             print("no near lumen present")
 
         try:
+          
             self.vis.remove_geometry(self.volumetric_near_point_cloud)
 
             
-                # self.volumetric_near_point_cloud = o3d.geometry.PointCloud()
-                # self.vis.add_geometry(self.volumetric_near_point_cloud)
+            # self.volumetric_near_point_cloud = o3d.geometry.PointCloud()
+            # self.vis.add_geometry(self.volumetric_near_point_cloud)
 
             
         except:
@@ -1283,6 +1291,8 @@ class PointCloudUpdater:
 
         previous_time = 0
 
+        
+
         for i in np.arange(starting_index,ending_index):
         # for i in np.arange(300,ending_index): # for troubleshooting ransac on k8_pva_tom_2
         # for i in np.arange(2350,ending_index): # for troubleshooting branch pass
@@ -1310,6 +1320,11 @@ class PointCloudUpdater:
             # grayscale_image=preprocess_ivus_image(grayscale_image, pc_updater.box_crop, pc_updater.circle_crop, pc_updater.text_crop, pc_updater.crosshairs_crop)
 
             try:
+                self.image_number = i
+                print("image number:", i)
+
+                # if(self.image_number < 27):
+                #     grayscale_image = self.constant_image
                 # pc_updater.image_callback(grayscale_image, TW_EM, i, model, dataset_name, gating, bin_number, pC_map, esdf_map, tsdf_map, killingfusion_save, dissection_parameterize, esdf_smoothing, certainty_coloring, vpC_map)
                 self.append_image_transform_pair(TW_EM, grayscale_image) #TURN TRY EXCEPT BACK ON
 
@@ -1342,7 +1357,7 @@ class PointCloudUpdater:
             # if(self.figure_mapping==1):
             #     intentional_fail # was about to save uniform colour point cloud for figure mapping
             
-  
+            
             o3d.io.write_point_cloud(self.write_folder +  "/volumetric_near_point_cloud.ply", self.volumetric_near_point_cloud)
 
             
@@ -2365,7 +2380,7 @@ class PointCloudUpdater:
         
 
         colors = [
-            [0.5, 0.0, 0.0],  # Maroon
+            [1.0, 0.0, 0.0],  # Maroon
             [0.0, 1.0, 0.0],  # Green
             [0.0, 0.0, 1.0],  # Blue
             [1.0, 1.0, 0.0]   # Yellow
@@ -2823,7 +2838,7 @@ class PointCloudUpdater:
             displacements = np.load(high_level_path + '/displacements.npz', allow_pickle = True)
             self.displacements = displacements['arr_0']
 
-            self.systole_locations = np.asarray(self.deformed_mesh.vertices)
+            self.systole_locations = copy.deepcopy(np.asarray(self.deformed_mesh.vertices))
 
             
 
@@ -2889,8 +2904,8 @@ class PointCloudUpdater:
         self.vis2.poll_events()
         self.vis2.update_renderer()
 
-        # remove this in future
-        self.simulate_device()
+        # auto
+        # self.simulate_device()
         self.evar_loft_sim = 0
 
         self.catheter_radius = 0.0015
@@ -3614,7 +3629,7 @@ class PointCloudUpdater:
         # print("TW_EM:", TW_EM)
 
         # cv2.imshow("rgb_image", grayscale_image)
-        # cv2.waitKey(0)
+        # cv2.waitKey(10)
 
         original_image = grayscale_image.copy()
         
@@ -3792,6 +3807,11 @@ class PointCloudUpdater:
                 # conf_colormap, overlay = build_colormap(conf_class2)
                 raw_data = pred[0].numpy()
                 mask_1, mask_2, largest_two_masks, spline_pixels = post_process_deeplumen(raw_data, conf_class2, self.conf_threshold)
+
+                # if(self.image_number<150):
+                #     mask_and = np.logical_or(mask_1, mask_2)
+                #     mask_1 = mask_and.astype(np.uint8) * 255
+                #     mask_2 = np.zeros_like(mask_1)
 
             
 
@@ -4156,12 +4176,29 @@ class PointCloudUpdater:
             mask_1_send = cv2.resize(mask_1, (np.shape(original_image)[0], np.shape(original_image)[1]))
             mask_2_send = cv2.resize(mask_2, (np.shape(original_image)[0], np.shape(original_image)[1]))
 
-            # rather than finding contours, just colour mask to save time
+            # CONTOUR DRAWING 
             mask_1_contour_send,hier = cv2.findContours(mask_1_send, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             mask_2_contour_send,hier = cv2.findContours(mask_2_send, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             cv2.drawContours(original_image, mask_1_contour_send, -1, (0, 0, 255), thickness=2)
             cv2.drawContours(original_image, mask_2_contour_send, -1, (255, 0, 0), thickness=2)
 
+            #FILLED TRANSPARENT MASKS
+
+            # Create color overlay
+            # h, w = original_image.shape[:2]
+            # mask_1_send = cv2.resize(mask_1, (w, h))
+            # mask_2_send = cv2.resize(mask_2, (w, h))
+            # mask_1_bin = (mask_1_send > 0).astype(np.uint8)
+            # mask_2_bin = (mask_2_send > 0).astype(np.uint8)
+            # overlay = np.zeros_like(original_image, dtype=np.uint8)
+            # overlay[mask_1_bin == 1] = (0, 0, 255)
+            # overlay[mask_2_bin == 1] = (255, 0, 0)
+            # alpha = 0.38  # transparency
+            # blended = cv2.addWeighted(overlay, alpha, original_image, 1 - alpha, 0)
+            # # no_mask = (mask_1_bin == 0) & (mask_2_bin == 0)
+            # original_image=blended
+
+        # FOR PAUSING IMAGE
         # cv2.imshow("original_image", original_image)
         # cv2.waitKey(0)
         
@@ -4740,20 +4777,29 @@ class PointCloudUpdater:
 
             
             # NEW METHOD - USE 4DUS PHASES TO DRIVE MOTION
-            bin_index = time_to_bin(phase_time, self.period, num_bins=9)
-            displacement = self.displacements[bin_index]
-            current_vertices = self.systole_locations + displacement
+            # bin_index = time_to_bin(phase_time, self.period, num_bins=9)
 
-            self.deformed_mesh.vertices = o3d.utility.Vector3dVector(current_vertices)
+            num_bins = 9
+            phase = (phase_time % self.period) / self.period   # ∈ [0,1)
+            fbin = phase * num_bins     # ∈ [0, num_bins)
+            bin0 = int(np.floor(fbin))
+            alpha = fbin - bin0             # ∈ [0,1)
+            bin1 = (bin0 + 1) % num_bins     # wrap around for last bin
+            D0 = self.displacements[bin0]
+            D1 = self.displacements[bin1]
+            displacement = ((1 - alpha) * D0) + (alpha * D1)
+            # displacement = self.displacements[bin_index]
+            current_vertices = copy.deepcopy(self.systole_locations) + displacement
 
-            temp_lineset = create_wireframe_lineset_from_mesh(self.deformed_mesh)
+            self.deformed_mesh.vertices = o3d.utility.Vector3dVector(copy.deepcopy(current_vertices))
 
-            
-            self.registered_ct_lineset.points = temp_lineset.points
-            self.registered_ct_lineset.lines = temp_lineset.lines
+            # temp_lineset = create_wireframe_lineset_from_mesh(self.deformed_mesh)
 
-            if(self.vis_red_vessel!=1):
-                self.vis.update_geometry(self.registered_ct_lineset)
+            # self.registered_ct_lineset.points = copy.deepcopy(temp_lineset.points)
+            # self.registered_ct_lineset.lines = copy.deepcopy(temp_lineset.lines)
+
+            # if(self.vis_red_vessel!=1):
+            #     self.vis.update_geometry(self.registered_ct_lineset)
 
             # mapping from coarse deformed mesh to fine deformed mesh nodes for endoscopic view
             fine_deformed_vertices = deform_fine_mesh_using_knn(self.registered_ct_mesh, self.deformed_mesh, self.registered_ct_mesh_2, self.knn_idxs, self.knn_weights, self.coarse_template_vertices, self.fine_template_vertices, self.adjacency_matrix)
