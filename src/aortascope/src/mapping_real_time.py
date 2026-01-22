@@ -2936,7 +2936,7 @@ class PointCloudUpdater:
             t_start = t_start.to_sec()
             delta = 0
 
-            if(self.replay_navigation==0):
+            if(self.replay_navigation==1):
                 self.ecg_latest=0
 
             # initialize ecg parameters
@@ -3457,6 +3457,10 @@ class PointCloudUpdater:
         
     def image_callback(self, msg):
 
+        if self.replay_navigation_called:
+            self.replay_navigation_data()
+            self.replay_navigation_called = False
+
         # print("step   :", msg.step)
         # print("data bytes:", len(msg.data))
 
@@ -3661,7 +3665,9 @@ class PointCloudUpdater:
         if(self.test_transform==1):
             TW_EM = np.eye(4)
         else:
+            
             TW_EM=transform_stamped_to_matrix(TW_EM)
+           
 
         # prune fast probe moves
         current_time_in_sec = self.transform_time.to_sec()
@@ -3835,9 +3841,7 @@ class PointCloudUpdater:
             self.tracking()
             self.reg_complete = False
 
-        if self.replay_navigation_called:
-            self.replay_navigation_data()
-            self.replay_navigation_called = False
+        
 
         if self.pause:
             print("detected temp rise")
