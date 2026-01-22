@@ -30,6 +30,7 @@ sim_device_pub           = rospy.Publisher('/sim_device', Bool, queue_size=1)
 shutdown_pub             = rospy.Publisher('/shutdown', Bool, queue_size=1)
 pullback_pub             = rospy.Publisher('/pullback', Int32, queue_size=1)
 replay_pub               = rospy.Publisher('/replay', Bool, queue_size=1)
+replay_navigation_pub    = rospy.Publisher('/replay_navigation', Bool, queue_size=1)
 cardiac_pub              = rospy.Publisher('/cardiac', Bool, queue_size=1)
 
 
@@ -305,6 +306,11 @@ def call_replay():
     time.sleep(6)
     replay_pub.publish(False)
 
+def call_replay_navigation():
+    replay_navigation_pub.publish(True)
+    time.sleep(6)
+    replay_navigation_pub.publish(False)
+
 def close_gui():
     root.quit()
     root.destroy()
@@ -467,6 +473,9 @@ try:
 
     sim_device = Button(root, text="Load IVUS Mesh Only", font=button_font, width=button_width, height=button_height, command = load_previous_surface_geometry)
     sim_device.grid(row=12, column=0, padx=padding_x, pady=padding_y)
+
+    replay_navigation = Button(root, text="Replay Navigation", font=button_font, width=button_width, height=button_height, command = call_replay_navigation)
+    replay_navigation .grid(row=13, column=0, padx=padding_x, pady=padding_y)
 
     # sim_device = Button(root, text="Simulate Device Deployment", font=button_font, width=button_width, height=button_height, command = sim_device_deployment)
     # sim_device.grid(row=13, column=0, padx=padding_x, pady=padding_y)

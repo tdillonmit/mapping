@@ -72,6 +72,8 @@ class PointCloudUpdater:
 
         self.prev_msg = None
 
+        self.replay_navigation = 0
+        self.replay_navigation_called = 0
         self.previous_phase = 0
         self.pose_batch = [] 
         self.pose_batch_2 = [] 
@@ -581,6 +583,7 @@ class PointCloudUpdater:
         rospy.Subscriber('/shutdown', Bool, self.shutdown_cb)
         rospy.Subscriber('/pullback', Int32, self.pullback_cb)
         rospy.Subscriber('/replay', Bool, self.replay_cb)
+        rospy.Subscriber('/replay_navigation', Bool, self.replay_navigation_cb)
         rospy.Subscriber('/evar_click', Int32MultiArray, self.evar_click_cb)
 
         self.start_record = False
@@ -684,6 +687,7 @@ class PointCloudUpdater:
     def shutdown_cb(self, msg):            self.shutdown = msg.data
     def pullback_cb(self, msg):            self.pullback = msg.data
     def replay_cb(self, msg):              self.replay = msg.data
+    def replay_navigation_cb(self, msg):   self.replay_navigation_called = msg.data
     
     # EVAR POSITIONING AND FENESTRATION FUNCTIONS
     def evar_click_cb(self, msg): 
@@ -1166,11 +1170,12 @@ class PointCloudUpdater:
         self.write_folder = rospy.get_param('dataset',0)
 
 
-        image_path =  '/home/tdillon/datasets/k4_pva_post_4dct_2/grayscale_images/*.npy'
-        sorted_images=sort_folder_string(image_path, "grayscale_image_")
-        grayscale_images=load_numpy_data_from_folder(sorted_images)
-        self.constant_image = grayscale_images[29]
+        # image_path =  '/home/tdillon/datasets/k4_pva_post_4dct_2/grayscale_images/*.npy'
+        # sorted_images=sort_folder_string(image_path, "grayscale_image_")
+        # grayscale_images=load_numpy_data_from_folder(sorted_images)
+        # self.constant_image = grayscale_images[29]
 
+        # REPLAY GATED DATA
         high_level_path = self.write_folder[:-12]
         if(self.write_folder.endswith('bin_0')==True):
             for i in np.arange(9):
@@ -1178,17 +1183,113 @@ class PointCloudUpdater:
                 rospy.set_param('dataset',self.write_folder)
                 print("RUNNING BIN:", self.write_folder)
                 self.replay_iteration()
+
+        # REPLAY NORMAL DATA
         else:
             self.replay_iteration()
             
 
-        # load the calibration file for the REPLAYED dataset - note this means you will have that calibration file loaded when you 
-        # go back to aortscope real time mapping
+    # load the calibration file for the REPLAYED dataset - note this means you will have that calibration file loaded when you 
+    # go back to aortscope real time mapping
 
-    def replay_navigation(self):
+    def replay_navigation_data(self):
+
+        self.replay_navigation_called = 0
+        self.replay_navigation = 1
+        self.record_poses = 0
+        
 
         
-        pass
+
+        self.write_folder = rospy.get_param('dataset',0)
+
+        if(self.write_folder == 0):
+            self.write_folder = self.prompt_for_folder()
+            
+        while(self.write_folder == None):
+            self.write_folder = self.prompt_for_folder()
+
+        # self.run_folder = self.write_folder
+        self.run_folder = self.write_folder
+        self.write_folder = self.write_folder[:-16]
+    
+        rospy.set_param('dataset',self.write_folder)
+        print("self.write_folder", self.write_folder)
+        print("self.run_folder", self.run_folder)
+        
+
+        self.tracking()
+        self.switch_probe_view()
+
+        
+
+        with open(self.write_folder + '/calibration_parameters_ivus.yaml', 'r') as file:
+            self.calib_yaml = yaml.safe_load(file)
+
+        self.angle = self.calib_yaml['/angle']
+        self.translation = self.calib_yaml['/translation']
+        self.radial_offset = self.calib_yaml['/radial_offset']
+        self.o_clock = self.calib_yaml['/oclock']
+        
+        self.default_values=load_default_values(self.write_folder + '/calibration_parameters_ivus.yaml')
+        self.scaling = self.default_values['/scaling']
+
+        
+        
+
+        transform_path = self.run_folder + '/TW_EMs/*.npy'
+        sorted_transforms=sort_folder_string(transform_path, "TW_EM_")
+        em_transforms=load_transform_data_from_folder(sorted_transforms)
+
+        transform_path = self.run_folder + '/TW_EM_3s/*.npy'
+        sorted_transforms=sort_folder_string(transform_path, "TW_EM_3_")
+        em_transforms_3=load_transform_data_from_folder(sorted_transforms)
+
+        transform_path = self.run_folder + '/phases/*.npy'
+        sorted_phases=sort_folder_string(transform_path, "phase_")
+        phases=load_phase_data_from_folder(sorted_phases)
+
+        # just for blank image
+        image_path =  '/home/tdillon/datasets/k4_pva_post_4dct_2/grayscale_images/*.npy'
+        sorted_images=sort_folder_string(image_path, "grayscale_image_")
+        grayscale_images=load_numpy_data_from_folder(sorted_images)
+        self.constant_image = grayscale_images[29]
+
+
+
+        starting_index=0
+        ending_index=len(em_transforms)-1
+
+   
+        previous_time = 0
+
+        self.record = 0
+        self.record_poses = 0
+
+        for i in np.arange(starting_index,ending_index):
+        
+            TW_EM=em_transforms[i] 
+            TW_EM_3 = em_transforms_3[i]
+            phase = phases[i]
+
+            
+            
+
+            # try:
+            self.image_number = i
+            print("transform number:", i)
+
+            self.prior_phase = phase
+            self.prior_TW_EM_3 = TW_EM_3
+            self.append_image_transform_pair(TW_EM, self.constant_image) #TURN TRY EXCEPT BACK ON
+
+            time.sleep(0.05)
+
+            # except:
+            #     print("skipped a transform")
+
+
+        
 
     def replay_iteration(self):
         try:
@@ -1794,6 +1895,23 @@ class PointCloudUpdater:
         # Open a folder selection dialog
         initial_dir = '/home/tdillon/datasets'
         folder_selected = filedialog.askdirectory(title="Select a Folder to Save the Data", initialdir=initial_dir)
+        
+        # If the user selects a folder (i.e., the folder path is not empty)
+        if folder_selected:
+            print(f"Using folder: {folder_selected}")
+            return folder_selected
+        else:
+            print("No folder selected")
+            return None
+        
+    def prompt_for_run_folder(self):
+        # Create a Tkinter root window (it won't show)
+        root3 = tk.Tk()
+        root3.withdraw()  # Hide the root window
+        
+        # Open a folder selection dialog
+        initial_dir = self.write_folder
+        folder_selected = filedialog.askdirectory(title="Select a Folder to Run the data", initialdir=initial_dir)
         
         # If the user selects a folder (i.e., the folder path is not empty)
         if folder_selected:
@@ -2626,14 +2744,15 @@ class PointCloudUpdater:
         while(self.write_folder ==None):
             self.write_folder = self.prompt_for_folder()
 
-        self.record_poses = 1
-        if(self.record_poses==1):
-            self.run_folder, self.run_number = make_next_run_folder(self.write_folder + '/pose_data')
-            print("initialized post batches")
-            self.pose_batch=[]
-            self.pose_batch_2=[]
-            self.phase_batch = []
-            self.image_tags=[]
+        if(self.replay_navigation==0): 
+            self.record_poses = 1
+            if(self.record_poses==1):
+                self.run_folder, self.run_number = make_next_run_folder(self.write_folder + '/pose_data')
+                print("initialized post batches")
+                self.pose_batch=[]
+                self.pose_batch_2=[]
+                self.phase_batch = []
+                self.image_tags=[]
 
         self.extend = 0
         self.record = 0
@@ -2812,11 +2931,13 @@ class PointCloudUpdater:
             # self.knn_idxs_spheres, self.knn_weights_spheres = precompute_knn_mapping(self.registered_ct_mesh, self.vertices_before, k=3)
 
             # get the ecg calibration
+            
             t_start = rospy.Time.now()
             t_start = t_start.to_sec()
             delta = 0
 
-            
+            if(self.replay_navigation==0):
+                self.ecg_latest=0
 
             # initialize ecg parameters
             # if(self.animal == 1):
@@ -3632,7 +3753,7 @@ class PointCloudUpdater:
         if(self.record_poses==1):
 
             
-            self.pose_batch.append(self.previous_tracker_transform)
+            self.pose_batch.append(self.previous_transform)
             self.pose_batch_2.append(self.previous_catheter_base)
             self.phase_batch.append(self.previous_phase)
 
@@ -3641,7 +3762,7 @@ class PointCloudUpdater:
             self.image_number = self.image_number+1
 
         if(self.record_poses == 1):
-            print("len pose batch", len(self.pose_batch))
+            # print("len pose batch", len(self.pose_batch))
             # if(len(self.image_batch)>500):
             if(len(self.pose_batch)>200):
                 print("quick save!")
@@ -3713,6 +3834,10 @@ class PointCloudUpdater:
         if self.reg_complete:
             self.tracking()
             self.reg_complete = False
+
+        if self.replay_navigation_called:
+            self.replay_navigation_data()
+            self.replay_navigation_called = False
 
         if self.pause:
             print("detected temp rise")
@@ -4753,75 +4878,45 @@ class PointCloudUpdater:
         if(self.cardiac_deformation==1):
     
 
+            num_bins = len(self.displacements)
 
-            t = rospy.Time.now()
-            t = t.to_sec()
+            if(self.replay_navigation==0):
+                t = rospy.Time.now()
+                t = t.to_sec()
 
-            if self.ecg_state == 0:
+                if self.ecg_state == 0:
+                    
+
+                    
+                    most_recent_peak = rospy.Time.now()
+                    most_recent_peak = most_recent_peak.to_sec()
+
+                    
+
+                    self.period = most_recent_peak - self.previous_peak
+                    self.previous_peak = most_recent_peak 
+                    self.ecg_state = 1
+                    print("RR interval:", self.period)
+
                 
 
                 
-                most_recent_peak = rospy.Time.now()
-                most_recent_peak = most_recent_peak.to_sec()
-
                 
+                phase_time = t-self.previous_peak    # time into current cycle (would be measured rather than calculated as remainder)
+                M = phase_time / self.period
 
-                self.period = most_recent_peak - self.previous_peak
-                self.previous_peak = most_recent_peak 
-                self.ecg_state = 1
-                print("RR interval:", self.period)
 
+
+                # NEW METHOD - USE 4DUS PHASES TO DRIVE MOTION
             
+                
+                phase = (phase_time % self.period) / self.period   # ∈ [0,1)
+                self.previous_phase = phase # for replaying data later
 
-            
-            
-            phase_time = t-self.previous_peak    # time into current cycle (would be measured rather than calculated as remainder)
-            M = phase_time / self.period
-
-
-            # cardiac motion model 
-
-            # triangle
-            # if(M < 0.75):
-            #     alpha = -((4/3)*M) + (1)
-            # elif(M >= 0.75):
-            #     alpha = 4*(M-0.75)
-
-            # peak bin 8
-            # if M <= 0.75:
-            #     alpha = 0.5 * (1 + np.cos(np.pi * (M / 0.75)))
-            # else:
-            #     alpha = 0.5 * (1 - np.cos(np.pi * ((M - 0.75) / 0.25)))
-
-            # swap systole and diastole if you have to!!
-
-            # peak bin 3
-            # if M<=0.25:
-            #     alpha = 0.5 * (1 - np.cos(np.pi * (M / 0.25)))
-            # else:
-            #     alpha = 0.5 * (1 + np.cos(np.pi * ((M - 0.25) / 0.75)))
-
-            # if M <= 0.75:
-            #     alpha = 0.5 * (1 + np.cos(np.pi * (M / 0.75)))
-            # else:
-            #     alpha = 0.5 * (1 - np.cos(np.pi * ((M - 0.75) / 0.25)))
+            else:
+                phase = self.prior_phase
 
 
-            # correct i think if you're going from systole to diastole
-            # if M <= 0.75:
-            #     alpha = 0.5 * (1 - np.cos(np.pi * (M / 0.75)))
-            # else:
-            #     alpha = 0.5 * (1 - np.cos(np.pi * ((1 - M) / 0.25)))
-
-            #OLD METHOD - MODEL BASED MOTION
-            # current_vertices, alpha = compute_current_vertices_cached(self.d_cum,self.systole_locations,self.direction_vectors,phase_time-0.5, self.period, self.PWV)
-
-            
-            # NEW METHOD - USE 4DUS PHASES TO DRIVE MOTION
-          
-            num_bins = 9
-            phase = (phase_time % self.period) / self.period   # ∈ [0,1)
-            self.previous_phase = phase # for replaying data later
             fbin = phase * num_bins     # ∈ [0, num_bins)
             bin0 = int(np.floor(fbin))
             alpha = fbin - bin0             # ∈ [0,1)
@@ -4834,14 +4929,7 @@ class PointCloudUpdater:
 
             self.deformed_mesh.vertices = o3d.utility.Vector3dVector(copy.deepcopy(current_vertices))
 
-            # temp_lineset = create_wireframe_lineset_from_mesh(self.deformed_mesh)
-
-            # self.registered_ct_lineset.points = copy.deepcopy(temp_lineset.points)
-            # self.registered_ct_lineset.lines = copy.deepcopy(temp_lineset.lines)
-
-            # if(self.vis_red_vessel!=1):
-            #     self.vis.update_geometry(self.registered_ct_lineset)
-
+        
             # mapping from coarse deformed mesh to fine deformed mesh nodes for endoscopic view
             fine_deformed_vertices = deform_fine_mesh_using_knn(self.registered_ct_mesh, self.deformed_mesh, self.registered_ct_mesh_2, self.knn_idxs, self.knn_weights, self.coarse_template_vertices, self.fine_template_vertices, self.adjacency_matrix)
 
@@ -5242,17 +5330,22 @@ class PointCloudUpdater:
 
                 
                 
-
-                try:
-                    # Lookup transform
-                    TW_EM_3 = self.tf_buffer.lookup_transform(ref_frame, steerable_frame, self.transform_time)
-                except (rospy.ROSException, tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
-                    rospy.logwarn("Failed to lookup transform")
-                    TW_EM_3 = None
+                if(self.replay_navigation==0):
+                    try:
+                        # Lookup transform
+                        TW_EM_3 = self.tf_buffer.lookup_transform(ref_frame, steerable_frame, self.transform_time)
+                    except (rospy.ROSException, tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+                        rospy.logwarn("Failed to lookup transform")
+                        TW_EM_3 = None
 
                 
 
-                TW_EM_3 = transform_stamped_to_matrix(TW_EM_3)
+                
+
+                    TW_EM_3 = transform_stamped_to_matrix(TW_EM_3)
+
+                else:
+                    TW_EM_3 = self.prior_TW_EM_3
 
                 # - BUDGE BASE FRAME INSIDE MESH ---- #
                 # query_points_tensor = o3d.core.Tensor([TW_EM_3[:3,3]], dtype=o3d.core.Dtype.Float32)  # shape (1,3)
