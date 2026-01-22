@@ -72,6 +72,12 @@ class PointCloudUpdater:
 
         self.prev_msg = None
 
+        self.previous_phase = 0
+        self.pose_batch = [] 
+        self.pose_batch_2 = [] 
+        self.phase_batch = [] 
+        self.image_tags = []
+
         self.wireframe_gen = WireframeGenerator()
 
         # for fenestration
@@ -1148,7 +1154,7 @@ class PointCloudUpdater:
 
         pass
         
-
+    
 
     def replay_function(self):
 
@@ -1178,6 +1184,11 @@ class PointCloudUpdater:
 
         # load the calibration file for the REPLAYED dataset - note this means you will have that calibration file loaded when you 
         # go back to aortscope real time mapping
+
+    def replay_navigation(self):
+
+        
+        pass
 
     def replay_iteration(self):
         try:
@@ -1940,19 +1951,26 @@ class PointCloudUpdater:
 
     def save_pose_data(self):
 
-    
+        print("running save!")
 
    
         # Iterate through the image and TW_EM batches simultaneously
         i=0
-        for (TW_EM, image_tag) in zip(self.pose_batch, self.image_tags):
+        for (TW_EM, TW_EM_3, phase, image_tag) in zip(self.pose_batch, self.pose_batch_2, self.phase_batch, self.image_tags):
        
         
-
             # Save the TW_EM data
-            tw_em_filename = f'{self.write_folder}/pose_data/TW_EM_{self.starting_index + image_tag -1}.npy'
+            tw_em_filename = f'{self.write_folder}/pose_data/run_' + str(self.run_number) +f'/TW_EMs/TW_EM_{self.starting_index + image_tag -1}.npy'
             with open(tw_em_filename, 'wb') as f:
                 np.save(f, TW_EM)
+
+            tw_em_filename = f'{self.write_folder}/pose_data/run_' + str(self.run_number) +f'/TW_EM_3s/TW_EM_3_{self.starting_index + image_tag -1}.npy'
+            with open(tw_em_filename, 'wb') as f:
+                np.save(f, TW_EM_3)
+
+            tw_em_filename = f'{self.write_folder}/pose_data/run_' + str(self.run_number) +f'/phases/phase_{self.starting_index + image_tag -1}.npy'
+            with open(tw_em_filename, 'wb') as f:
+                np.save(f, phase)
 
             i=i+1
 
@@ -2314,8 +2332,8 @@ class PointCloudUpdater:
 
 
         # NOte that IVUS centroids have been used here!!!
-        # self.ct_centroids = np.load(self.write_folder + '/ct_centroids.npy')
-        self.ct_centroids = np.load(self.write_folder + '/ivus_centroids.npy')
+        self.ct_centroids = np.load(self.write_folder + '/ct_centroids.npy')
+        # self.ct_centroids = np.load(self.write_folder + '/ivus_centroids.npy')
 
         side_branch_centrelines_indices = np.load(self.write_folder + '/side_branch_centrelines_indices.npy')
 
@@ -2331,7 +2349,7 @@ class PointCloudUpdater:
 
 
         # only load CORRESPONDING ivus_centroids to remove false positives
-        load_corres = 1
+        load_corres = 0
         print('before crop', self.ct_centroids)
         if(load_corres ==1):
             corres_original = np.load(self.write_folder + '/corres_original.npy')
@@ -2461,8 +2479,10 @@ class PointCloudUpdater:
         orig_points = np.asarray(self.ct_spheres.vertices)
         self.ct_spheres_points = copy.deepcopy(orig_points)
         self.vis_2_spheres_points = copy.deepcopy(orig_points)
-        self.knn_idxs_spheres, self.knn_weights_spheres = precompute_knn_mapping(self.registered_ct_mesh, self.ct_spheres_points, k=3)
-        self.knn_idxs_spheres_dup, self.knn_weights_spheres_dup = precompute_knn_mapping(self.registered_ct_mesh, self.vis_2_spheres_points, k=3)
+        self.knn_idxs_spheres, self.knn_weights_spheres = precompute_knn_mapping(self.registered_ct_mesh, self.ct_spheres_points, k=5)
+        self.knn_idxs_spheres_dup, self.knn_weights_spheres_dup = precompute_knn_mapping(self.registered_ct_mesh, self.vis_2_spheres_points, k=5)
+
+        self.knn_idxs_torus_origins, self.knn_weights_torus_origins = precompute_knn_mapping(self.registered_ct_mesh, self.torus_origins, k=5)
         
         # ---- END OF SPHERE RENDERING ---- #
 
@@ -2588,6 +2608,10 @@ class PointCloudUpdater:
     
     def tracking(self):
 
+        
+
+            
+
         self.cardiac_initialized=0
 
         self.write_folder = rospy.get_param('dataset', 0) 
@@ -2601,6 +2625,15 @@ class PointCloudUpdater:
             
         while(self.write_folder ==None):
             self.write_folder = self.prompt_for_folder()
+
+        self.record_poses = 1
+        if(self.record_poses==1):
+            self.run_folder, self.run_number = make_next_run_folder(self.write_folder + '/pose_data')
+            print("initialized post batches")
+            self.pose_batch=[]
+            self.pose_batch_2=[]
+            self.phase_batch = []
+            self.image_tags=[]
 
         self.extend = 0
         self.record = 0
@@ -2686,10 +2719,8 @@ class PointCloudUpdater:
         
 
         
-        if(self.record_poses == 1):
-            print("initialized post batches")
-            self.pose_batch=[]
-            self.image_tags=[]
+      
+            
            
 
         # GUI SPECIFIC - self.write_folder = rospy.get_param('dataset', 0) 
@@ -2937,7 +2968,7 @@ class PointCloudUpdater:
 
             # LOAD THE ENDOANCHOR CALIBRATION SO DON'T GET MIXED UP
             # with open('/home/tdillon/mapping/src/calibration_parameters_endoanchor.yaml', 'r') as file: # 035
-            with open('/home/tdillon/mapping/src/calibration_parameters_018_endoanchor_2.yaml', 'r') as file: #018
+            with open('/home/tdillon/mapping/src/calibration_parameters_ivus_018_endoanchor_2.yaml', 'r') as file: #018
                 self.calib_yaml = yaml.safe_load(file)
 
             self.angle = self.calib_yaml['/angle']
@@ -2998,7 +3029,8 @@ class PointCloudUpdater:
         
         self.vis.remove_geometry(self.volumetric_near_point_cloud)
         self.deeplumen_on=0
-        self.vpC_map=0
+        if(self.endoanchor!=1):
+            self.vpC_map=0
 
             
          
@@ -3581,13 +3613,7 @@ class PointCloudUpdater:
 
             self.image_number = self.image_number+1
 
-        if(self.record_poses==1):
-
-            self.pose_batch.append(TW_EM)
-
-            self.image_tags.append(self.image_number)
-
-            self.image_number = self.image_number+1
+        
 
         # reset memory for efficiency
         if(self.record == 1):
@@ -3602,13 +3628,27 @@ class PointCloudUpdater:
                 self.image_tags = []
                 self.image_number = 1
                 
+        # for replaying navigation data
+        if(self.record_poses==1):
+
+            
+            self.pose_batch.append(self.previous_tracker_transform)
+            self.pose_batch_2.append(self.previous_catheter_base)
+            self.phase_batch.append(self.previous_phase)
+
+            self.image_tags.append(self.image_number)
+
+            self.image_number = self.image_number+1
 
         if(self.record_poses == 1):
+            print("len pose batch", len(self.pose_batch))
             # if(len(self.image_batch)>500):
-            if(len(self.pose_batch)>500):
+            if(len(self.pose_batch)>200):
                 print("quick save!")
                 self.save_pose_data()
                 self.pose_batch = [] 
+                self.pose_batch_2 = [] 
+                self.phase_batch = [] 
                 self.image_tags = [] 
                 self.image_number = 1
 
@@ -3622,7 +3662,7 @@ class PointCloudUpdater:
 
     
 
-    def append_image_transform_pair(self, TW_EM, grayscale_image):
+    def append_image_transform_pair(self, TW_EM, grayscale_image, prior_phase = None):
 
 
 
@@ -4507,6 +4547,7 @@ class PointCloudUpdater:
                     self.volumetric_near_point_cloud.points.extend(near_vpC_points.points)
                     pass
                 else:
+                   
                     self.volumetric_near_point_cloud.points = near_vpC_points.points
 
 
@@ -4777,10 +4818,10 @@ class PointCloudUpdater:
 
             
             # NEW METHOD - USE 4DUS PHASES TO DRIVE MOTION
-            # bin_index = time_to_bin(phase_time, self.period, num_bins=9)
-
+          
             num_bins = 9
             phase = (phase_time % self.period) / self.period   # ∈ [0,1)
+            self.previous_phase = phase # for replaying data later
             fbin = phase * num_bins     # ∈ [0, num_bins)
             bin0 = int(np.floor(fbin))
             alpha = fbin - bin0             # ∈ [0,1)
@@ -4822,8 +4863,17 @@ class PointCloudUpdater:
 
 
             # ring deformation
-            ct_spheres_deformed_points = deform_points_using_knn(self.registered_ct_mesh, self.deformed_mesh,  self.knn_idxs_spheres, self.knn_weights_spheres, self.coarse_template_vertices, self.ct_spheres_points, self.adjacency_matrix)
+            # ct_spheres_deformed_points = deform_points_using_knn(self.registered_ct_mesh, self.deformed_mesh,  self.knn_idxs_spheres, self.knn_weights_spheres, self.coarse_template_vertices, self.ct_spheres_points, self.adjacency_matrix)
+            torus_deformed_points = deform_points_using_knn(self.registered_ct_mesh, self.deformed_mesh,  self.knn_idxs_torus_origins, self.knn_weights_torus_origins, self.coarse_template_vertices, self.torus_origins, self.adjacency_matrix)
 
+            ct_spheres_deformed_points = []
+            for torus_deformed_point, normal in zip(torus_deformed_points, self.torus_normals):
+                
+                torus = create_torus(torus_deformed_point, normal, self.major_radius, self.minor_radius, 30)
+                ct_sphere_deformed_point = np.asarray(torus.vertices)
+                ct_spheres_deformed_points.append(ct_sphere_deformed_point)
+
+            ct_spheres_deformed_points = np.vstack(ct_spheres_deformed_points)
             self.ct_spheres.vertices =  o3d.utility.Vector3dVector(ct_spheres_deformed_points)
             self.vis_2_spheres.vertices = self.ct_spheres.vertices
             self.vis_2_spheres.triangles = self.ct_spheres.triangles
@@ -4960,10 +5010,11 @@ class PointCloudUpdater:
                 else:
                     centroid = self.funsr_centroid
 
-                # position_tracker = TW_EM[:3,3]
-                self.position_tracker_buffer.append(TW_EM[:3,3])
+                position_tracker = TW_EM[:3,3]
+                # self.position_tracker_buffer.append(TW_EM[:3,3])
                 average_position_tracker = np.mean(self.position_tracker_buffer, axis=0)
-                average_point = ((centroid/4)+(3*average_position_tracker/4))
+                # average_point = ((centroid/4)+(3*average_position_tracker/4))
+                average_point = ((centroid/4)+(3*position_tracker/4))
                 lookat = average_point
 
 
