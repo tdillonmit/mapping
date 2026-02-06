@@ -14,12 +14,14 @@ save_replay_data: 1
 
 # healthy first return manual segmentation
 tsdf_map : 1
-# voxel_size : 0.0025
-voxel_size : 0.0035
+voxel_size : 0.0025
+# voxel_size : 0.006
+# voxel_size : 0.0035
 # voxel_size : 0.006
 
-
-conf_threshold: 0.92  # lower is better for animals where branch segmentation is less certain
+hybrid_seg: 0
+# conf_threshold: 0.92  # lower is better for animals where branch segmentation is less certain
+conf_threshold: 0.3  # lower is better for animals where branch segmentation is less certain
 # conf_threshold: 0.0010 # lower is better for animals where branch segmentation is less certain
 # conf_threshold: 0.0000010 # lower is better for animals where branch segmentation is less certain
 
@@ -32,10 +34,11 @@ deeplumen_on : 1
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/best_cbam_model/weights.weights.h5
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/cbam_11_phantoms/weights.weights.h5
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/cbam_12_phantoms_best_dice/weights.weights.h5
-model_path: /home/tdillon/segmentation/deepivus_trained_models/cbam_13_phantoms/weights.weights.h5
+# model_path: /home/tdillon/segmentation/deepivus_trained_models/cbam_13_phantoms/weights.weights.h5
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/frozen_animal_model/weights.weights.h5 
 # model_path: /home/tdillon/segmentation/deepivus_trained_models/frozen_animal_model_2/weights.weights.h5  # slightly better detection I think?
-
+model_path: /home/tdillon/segmentation/deepivus_trained_models/animal_decoder/weights.weights.h5  
+# model_path: /home/tdillon/segmentation/deepivus_trained_models/animal_lower_lr/weights.weights.h5  
 
 
 deeplumen_slim_on: 0
@@ -74,7 +77,7 @@ steerable: 0
 
 # double_display: 1
 double_display: 1
-test_image: 1 # for offline processing - test transform not needed
+test_image: 0 # for offline processing - test transform not needed
 test_transform: 0 # frame grabber plugged in, EM not, ok for models that segment a shape with black background
 machine: philips
 vis_red_vessel: 0

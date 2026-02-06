@@ -16,7 +16,7 @@ save_replay_data: 0
 # healthy first return manual segmentation
 tsdf_map : 0
 voxel_size : 0.005
-
+hybrid_seg: 0
 conf_threshold : 0.09
 
 # ML segmentation
@@ -48,8 +48,8 @@ dissection_track: 0
 # non rigid icp registered ct scan for tracking
 registered_ct : 1
 registered_ct_dataset: user_has_not_defined
-live_deformation: 0 # turned on recently, mesh still looks distorted and probably not worth it - enough validation in endoanchor
-cardiac_deformation: 1
+live_deformation: 1 # turned on recently, mesh still looks distorted and probably not worth it - enough validation in endoanchor
+cardiac_deformation: 0
 animal: 0
 guidewire: 0 # recently turned off Nov 11
 steerable: 1
